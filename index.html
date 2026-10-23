@@ -1,0 +1,910 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+    <meta name="description" content="Buy and sell quality pre-owned products through auctions or Buy Now. Compare clear listing details, reputation and flexible handover options in this browser-local research prototype.">
+    <title>Urbids | Quality pre-owned marketplace</title>
+    <link rel="stylesheet" href="css/tokens.css">
+    <link rel="stylesheet" href="css/base.css">
+    <link rel="stylesheet" href="css/components.css">
+    <link rel="stylesheet" href="css/account.css">
+    <link rel="stylesheet" href="css/responsive.css">
+</head>
+<body>
+    <header class="site-header">
+        <div class="container navigation">
+            <a class="brand" id="brand-name" href="#listings">Urbids</a>
+            <div class="header-search" id="header-search">
+                <label class="visually-hidden" for="listing-search-input">Search products</label>
+                <input id="listing-search-input" type="search" placeholder="Search premium pre-owned finds">
+            </div>
+            <button class="header-icon-button mobile-search-toggle" id="mobile-search-toggle" type="button" aria-label="Open search" aria-expanded="false" aria-controls="header-search">Search</button>
+            <button class="header-icon-button mobile-watchlist-toggle" id="mobile-watchlist-toggle" type="button" aria-label="Show watched items" aria-pressed="false">Saved</button>
+            <button class="header-icon-button notification-center-button" id="notification-center-button" type="button" aria-label="Notifications">Alerts <span class="notification-unread-count" id="notification-unread-count" hidden></span></button>
+            <nav class="navigation-links" aria-label="Main navigation">
+                <a href="#sell">Sell</a>
+                <a href="#public-help">Help</a>
+                <button id="header-watchlist-toggle" type="button" aria-pressed="false">Watchlist</button>
+                <details class="profile-control" id="profile-control">
+                    <summary id="profile-control-toggle" aria-label="Open your profile">
+                        <span class="profile-avatar" id="profile-avatar">KS</span>
+                        <span class="profile-control-copy"><strong id="profile-name">Kunal</strong><small id="profile-reputation">4.9 ★ · 24 completed</small></span>
+                    </summary>
+                    <div class="profile-menu">
+                        <p class="profile-prototype-note">Prototype only</p>
+                        <p class="profile-user-summary" id="profile-user-summary">Bandra West, Mumbai</p>
+                        <button id="open-my-activity" type="button" data-account-section="activity">My Activity</button>
+                        <button id="open-profile-reviews" type="button" data-account-section="profile">Profile and reviews</button>
+                        <button id="open-account-details" type="button" data-account-section="details">Account details</button>
+                        <button id="profile-share-feedback" type="button">Share feedback</button>
+                        
+                    </div>
+                </details>
+            </nav>
+            <details class="mobile-menu">
+                <summary id="mobile-menu-toggle" aria-label="Open menu">Menu</summary>
+                <nav aria-label="Mobile navigation">
+                    <a href="#sell">Sell an item</a>
+                    <a href="#public-help">Help &amp; safety</a>
+                    
+                    <p class="mobile-profile-note">Fictional profile: <strong id="mobile-profile-name">Kunal</strong></p>
+                    <button id="mobile-open-my-activity" type="button" data-account-section="activity">My Activity</button>
+                    <button type="button" data-account-section="profile">Profile and reviews</button>
+                    <button type="button" data-account-section="details">Account details</button>
+                    <button id="mobile-share-feedback" type="button">Share feedback</button>
+                    
+                </nav>
+            </details>
+        </div>
+    </header>
+
+    <nav class="category-nav" id="category-navigation" aria-label="Browse categories">
+        <div class="container category-nav-list"></div>
+    </nav>
+
+    <main>
+        <section class="hero">
+            <div class="container hero-content">
+                <div>
+                    <h1 id="hero-tagline">Your marketplace for pre-owned goods</h1>
+                    <p>Discover products worth owning again.</p>
+                    <span id="pilot-city" class="visually-hidden">Mumbai</span>
+                </div>
+                <div class="hero-actions">
+                    <a class="primary-button" href="#listings">Browse products</a>
+                    <a class="secondary-button" href="#sell">Sell an item</a>
+                </div>
+                <p class="hero-trust">Research prototype. Fictional listings; no real transactions.</p>
+                <p class="hero-trust">Activity stays in this browser; testers are not connected to each other.</p>
+            </div>
+        </section>
+
+        
+
+        
+        <p class="container bid-error" id="storage-status" role="alert" hidden></p>
+
+        
+
+        <section id="listings">
+            <div class="container">
+                <div class="marketplace-heading">
+                    <div>
+                        <p class="eyebrow">CURATED IN MUMBAI</p>
+                        <h2 class="section-title">Discover your next find</h2>
+                    </div>
+                    <p class="listings-count"><span id="filtered-listing-count" aria-live="polite">0</span> finds <span aria-hidden="true">·</span> <span id="public-listing-count">0</span> total</p>
+                </div>
+                <p class="listing-image-note bid-minimum">Listing images are illustrative sample photos and may not show the exact item or model.</p>
+                <div class="discovery-tabs" role="group" aria-label="Discover listings">
+                    <button class="discovery-tab" type="button" data-discovery="for-you" aria-pressed="true">For You</button>
+                    <button class="discovery-tab" type="button" data-discovery="ending-soon" aria-pressed="false">Ending Soon</button>
+                    <button class="discovery-tab" type="button" data-discovery="popular" aria-pressed="false">Most bid on</button>
+                    <button class="discovery-tab" type="button" data-discovery="newly-listed" aria-pressed="false">Newly Listed</button>
+                    <button class="discovery-tab" type="button" data-discovery="buy-now" aria-pressed="false">Buy Now</button>
+                    <button class="discovery-tab" type="button" data-discovery="near-you" aria-pressed="false">Near You</button>
+                    <button class="discovery-tab" type="button" data-discovery="price-drops" aria-pressed="false">Price drops</button>
+                    <button class="discovery-tab" type="button" data-discovery="relisted" aria-pressed="false">Relisted</button>
+                </div>
+                <details class="listing-filter-panel" id="listing-filter-panel" open>
+                    <summary><span>Filters</span><span id="filter-summary-count">All finds</span></summary>
+                    <div class="listing-filters">
+                    <label class="condition-filter" for="condition-filter">
+                        Condition
+                        <select id="condition-filter"></select>
+                    </label>
+                    <label class="price-filter" for="maximum-bid-filter">
+                        Max current bid (INR)
+                        <input id="maximum-bid-filter" type="number" min="0" step="100" placeholder="Any price">
+                    </label>
+                    <label class="watchlist-filter" for="watchlist-only-filter">
+                        <input id="watchlist-only-filter" type="checkbox">
+                        Watched items only
+                    </label>
+                    <label class="buy-now-filter" for="buy-now-only-filter">
+                        <input id="buy-now-only-filter" type="checkbox">
+                        Buy Now available
+                    </label>
+                    <label class="sort-filter" for="listing-sort">
+                        Sort listings
+                        <select id="listing-sort">
+                            <option value="featured">Featured</option>
+                            <option value="ending-soon">Ending soon</option>
+                        </select>
+                    </label>
+                    </div>
+                </details>
+                <div class="listings" id="listing-container"></div>
+                <div class="no-listings-message" id="no-listings-message" role="status" hidden>
+                    <span>No listings match these filters.</span>
+                    <button id="clear-listing-filters" type="button">Clear filters</button>
+                </div>
+            </div>
+        </section>
+
+        <dialog class="bid-dialog" id="bid-dialog" aria-labelledby="bid-dialog-title">
+            <div class="bid-dialog-content">
+                <h2 id="bid-dialog-title">Place a bid</h2>
+                <p class="bid-item-name" id="bid-item-name"></p>
+                <dl class="bid-summary">
+                    <div><dt>Current bid</dt><dd id="dialog-current-bid"></dd></div>
+                    <div><dt>Next bid</dt><dd id="dialog-next-bid"></dd></div>
+                </dl>
+                <form id="bid-form" novalidate>
+                    <button class="primary-button" id="place-next-bid" type="submit"></button>
+                    <p class="bid-success" id="bid-success" role="status" hidden></p>
+                    <section class="auto-bid" id="auto-bid-panel" aria-labelledby="auto-bid-heading">
+                        <h3 id="auto-bid-heading">Automatic bidding</h3>
+                        <p class="auto-bid-help">Let Urbids bid for you up to a private maximum.</p>
+                        <p class="auto-bid-status" id="auto-bid-status" role="status"></p>
+                        <button class="bid-cancel" id="auto-bid-expand" type="button" aria-expanded="false" aria-controls="auto-bid-fields">Set maximum</button>
+                        <div class="auto-bid-fields" id="auto-bid-fields" hidden>
+                            <label for="auto-bid-max">Your private maximum</label>
+                            <input id="auto-bid-max" type="number" min="1" step="1" inputmode="numeric" aria-describedby="auto-bid-help auto-bid-status">
+                            <p class="auto-bid-help" id="auto-bid-help">We increase your bid only when needed.</p>
+                            <div class="auto-bid-actions">
+                                <button class="bid-cancel" id="auto-bid-save" type="button">Save maximum</button>
+                                <button class="bid-cancel" id="auto-bid-disable" type="button" hidden>Turn off automatic bidding</button>
+                            </div>
+                        </div>
+                    </section>
+                    <p class="bid-error" id="bid-error" role="alert"></p>
+                    <div class="bid-actions">
+                        <button class="bid-cancel" id="cancel-bid" type="button">Close</button>
+                    </div>
+                    <p class="bid-reservation-note">If you win, confirm within 6 hours. A simulated reservation deposit may apply.</p>
+                </form>
+            </div>
+        </dialog>
+
+        <dialog class="bid-dialog" id="auction-winner-dialog" aria-labelledby="auction-winner-title">
+            <div class="bid-dialog-content">
+                <h2 id="auction-winner-title">You won!</h2>
+                <p class="dialog-current-bid" id="auction-winner-item"></p>
+                <p id="auction-winner-name"></p>
+                <p class="dialog-current-bid" id="auction-winning-bid"></p>
+                <p class="bid-minimum" id="auction-commitment-note"></p>
+                <p class="bid-minimum" id="auction-winner-deadline"></p>
+                <div class="bid-actions">
+                    <button class="bid-cancel" id="close-auction-winner" type="button">Close</button>
+                    <button class="primary-button" id="continue-auction-booking-token" type="button">Confirm purchase</button>
+                    <button class="bid-cancel" id="decline-auction-win" type="button">Decline purchase</button>
+                </div>
+            </div>
+        </dialog>
+
+        <dialog class="bid-dialog" id="buy-now-dialog" aria-labelledby="buy-now-title">
+            <div class="bid-dialog-content">
+                <h2 id="buy-now-title">Buy Now</h2>
+                <p id="buy-now-item-name"></p>
+                <p class="dialog-current-bid" id="buy-now-price"></p>
+                <p class="bid-minimum" id="buy-now-token-note"></p>
+                <div class="bid-actions">
+                    <button class="bid-cancel" id="cancel-buy-now" type="button">Cancel</button>
+                    <button class="primary-button" id="confirm-buy-now" type="button">Reserve item</button>
+                </div>
+                <p class="bid-success" id="buy-now-success" role="status" hidden></p>
+                <button class="primary-button" id="schedule-meetup" type="button" hidden>Schedule a meetup</button>
+                <button class="primary-button" id="buy-now-done" type="button" hidden>Done</button>
+            </div>
+        </dialog>
+
+        <dialog class="bid-dialog" id="fulfilment-choice-dialog" aria-labelledby="fulfilment-choice-title">
+            <div class="bid-dialog-content">
+                <h2 id="fulfilment-choice-title">Collection or delivery</h2>
+                <p class="dialog-current-bid" id="fulfilment-choice-item"></p>
+                <p class="bid-minimum">Meetup is optional. Shipping is a prototype/research-only simulation.</p>
+                <p class="bid-minimum" id="simple-collection-warning"></p>
+                <label id="simple-collection-decline-label" hidden><input id="simple-collection-decline" type="checkbox"> Continue without the recommended inspection</label>
+                <p class="bid-error" id="fulfilment-choice-error" role="alert"></p>
+                <div class="bid-actions">
+                    <button class="bid-cancel" id="choose-meetup" type="button">Public meet and inspect</button>
+                    <button class="primary-button" id="choose-simple-collection" type="button">Simple collection</button>
+                    <button class="bid-cancel" id="choose-shipping" type="button">View simulated shipping</button>
+                </div>
+                <button class="bid-cancel" id="close-fulfilment-choice" type="button">Close</button>
+            </div>
+        </dialog>
+
+        <dialog class="bid-dialog" id="shipping-dialog" aria-labelledby="shipping-title">
+            <div class="bid-dialog-content">
+                <h2 id="shipping-title">Shipping</h2>
+                <p class="dialog-current-bid" id="shipping-item-name"></p>
+                <p class="bid-minimum" id="shipping-status" role="status"></p>
+                <p id="shipping-reference"></p>
+                <p class="bid-minimum" id="shipping-inspection-window"></p>
+                <p class="bid-error" id="shipping-error" role="alert"></p>
+                <div class="bid-actions">
+                    <button class="primary-button" id="request-shipping" type="button" hidden>Request shipping</button>
+                    <button class="primary-button" id="dispatch-shipping" type="button" hidden>Simulate seller dispatch</button>
+                    <button class="primary-button" id="deliver-shipping" type="button" hidden>Simulate delivery</button>
+                    <button class="primary-button" id="accept-shipping" type="button" hidden>Accept item</button>
+                    <button class="bid-cancel" id="report-shipping-issue" type="button" hidden>Report an issue</button>
+                    <button class="bid-cancel" id="close-shipping" type="button">Close</button>
+                </div>
+            </div>
+        </dialog>
+
+        <dialog class="bid-dialog" id="meetup-dialog" aria-labelledby="meetup-title">
+            <div class="bid-dialog-content">
+                <h2 id="meetup-title">Schedule a meetup</h2>
+                <p class="dialog-current-bid" id="meetup-item-name"></p>
+                <p id="meetup-item-price"></p>
+                <p class="bid-minimum" id="meetup-token-note">Meet in a busy, staffed public place. Do not share your home address or agree to a private meetup. Request is saved locally; the seller is not notified.</p>
+                <form class="meetup-form" id="meetup-form">
+                    <label for="meetup-date">Date</label>
+                    <input id="meetup-date" type="date" aria-describedby="meetup-token-note meetup-error" required>
+
+                    <label for="meetup-time">Time</label>
+                    <input id="meetup-time" type="time" step="900" aria-describedby="meetup-token-note meetup-error" required>
+
+                    <label for="meetup-location">Public meeting place in Mumbai</label>
+                    <select id="meetup-location" aria-describedby="meetup-token-note meetup-error" required>
+                        <option value="">Choose a public place</option>
+                        <optgroup label="South Mumbai">
+                            <option value="Phoenix Palladium, Lower Parel · main atrium">Phoenix Palladium · main atrium</option>
+                            <option value="CROSS MAIDAN metro concourse, Churchgate">Churchgate · metro concourse</option>
+                        </optgroup>
+                        <optgroup label="Western suburbs">
+                            <option value="Infiniti Mall, Malad · main entrance">Infiniti Mall Malad · main entrance</option>
+                            <option value="R City Mall, Ghatkopar · central atrium">R City Mall · central atrium</option>
+                        </optgroup>
+                        <optgroup label="Central Mumbai">
+                            <option value="Phoenix Marketcity, Kurla · main atrium">Phoenix Marketcity · main atrium</option>
+                        </optgroup>
+                    </select>
+                    <p class="bid-error" id="meetup-error" role="alert"></p>
+                    <div class="bid-actions">
+                        <button class="bid-cancel" id="cancel-meetup" type="button">Cancel</button>
+                        <button class="primary-button" type="submit">Save meetup request</button>
+                    </div>
+                </form>
+                <p class="bid-success" id="meetup-success" role="status" hidden></p>
+                <button class="primary-button" id="start-inspection" type="button" hidden>Start inspection</button>
+                <button class="primary-button" id="meetup-done" type="button" hidden>Done</button>
+            </div>
+        </dialog>
+
+        <dialog class="bid-dialog inspection-dialog" id="inspection-dialog" aria-labelledby="inspection-title">
+            <div class="bid-dialog-content">
+                <h2 id="inspection-title">Inspect the item</h2>
+                <p class="dialog-current-bid" id="inspection-item-name"></p>
+                <p class="bid-minimum" id="inspection-guidance">Approval in this demo does not release payment.</p>
+                <p class="inspection-declared-details" id="inspection-declared-details"></p>
+                <label for="inspection-rejection-reason">If you do not proceed, choose why</label>
+                <select id="inspection-rejection-reason">
+                    <option value="">Choose a reason</option>
+                    <option value="wrong_product">Wrong product / model / variant</option>
+                    <option value="undisclosed_defect">Undisclosed defect</option>
+                    <option value="materially_worse_condition">Materially worse condition</option>
+                    <option value="missing_promised_accessory">Missing promised item / accessory</option>
+                    <option value="functional_failure">Functional failure</option>
+                    <option value="identifier_mismatch">Serial / IMEI mismatch</option>
+                    <option value="activation_lock">Activation-lock issue</option>
+                    <option value="counterfeit_or_ownership_concern">Counterfeit or ownership concern</option>
+                    <option value="other_material_mismatch">Other material mismatch</option>
+                    <option value="changed_mind">Changed my mind</option>
+                </select>
+                <label id="inspection-mismatch-description-label" for="inspection-mismatch-description" hidden>Describe the material mismatch</label>
+                <textarea id="inspection-mismatch-description" maxlength="200" rows="2" hidden></textarea>
+                <p class="bid-minimum">Inspection compares the item with its saved listing snapshot. It is not for price renegotiation. This warning is prototype policy wording, not legal advice.</p>
+                <ul class="inspection-checklist" id="inspection-checklist" aria-describedby="inspection-guidance inspection-error"></ul>
+                <p class="bid-error" id="inspection-error" role="alert"></p>
+                <div class="bid-actions">
+                    <button class="bid-cancel" id="reject-inspection" type="button">Reject item</button>
+                    <button class="primary-button" id="approve-inspection" type="button">Approve item</button>
+                </div>
+                <p class="bid-success" id="inspection-success" role="status" hidden></p>
+                <button class="primary-button" id="continue-final-payment" type="button" hidden>Continue to payment demo</button>
+                <button class="primary-button" id="inspection-done" type="button" hidden>Done</button>
+            </div>
+        </dialog>
+        <dialog class="bid-dialog" id="final-payment-dialog" aria-labelledby="final-payment-title">
+            <div class="bid-dialog-content">
+                <h2 id="final-payment-title">Final payment demo</h2>
+                <p class="dialog-current-bid" id="final-payment-item"></p>
+                <p>Item price: <span id="final-payment-total"></span></p>
+                <p>Reservation deposit: <span id="final-payment-token"></span> (simulated, not charged)</p>
+                <p class="dialog-current-bid">Remaining amount (illustrative): <span id="final-payment-remaining"></span></p>
+                <p class="bid-minimum">Demo preview only. No money is collected or transferred.</p>
+                <div class="bid-actions">
+                    <button class="bid-cancel" id="cancel-final-payment" type="button">Cancel</button>
+                    <button class="primary-button" id="preview-final-payment" type="button">Pay remaining amount (demo)</button>
+                </div>
+                <p class="bid-success" id="final-payment-success" role="status" hidden></p>
+                <button class="primary-button" id="continue-handover" type="button" hidden>Continue to handover demo</button>
+                <button class="primary-button" id="final-payment-done" type="button" hidden>Done</button>
+            </div>
+        </dialog>
+
+        <dialog class="bid-dialog" id="handover-dialog" aria-labelledby="handover-title">
+            <div class="bid-dialog-content">
+                <h2 id="handover-title">Confirm handover</h2>
+                <p class="dialog-current-bid" id="handover-item-name"></p>
+                <p class="bid-minimum">Complete the transaction here to retain your transaction record, rating eligibility and issue support.</p>
+                <p class="bid-minimum" id="handover-role-note"></p>
+                <div class="handover-actions">
+                    <button class="primary-button" id="confirm-seller-handover" type="button">Seller: confirm handover</button>
+                    <button class="primary-button" id="confirm-buyer-receipt" type="button" disabled>Buyer: confirm receipt</button>
+                </div>
+                <p class="bid-success" id="handover-status" role="status"></p>
+                <button class="bid-cancel" id="close-handover" type="button">Close</button>
+                <button class="primary-button" id="handover-done" type="button" hidden>Done</button>
+            </div>
+        </dialog>
+
+        <dialog class="bid-dialog" id="report-issue-dialog" aria-labelledby="report-issue-title">
+            <div class="bid-dialog-content">
+                <h2 id="report-issue-title">Report an issue</h2>
+                <p class="dialog-current-bid" id="report-issue-item"></p>
+                <p class="bid-minimum">Transaction paused while this issue is reviewed.</p>
+                <form id="report-issue-form">
+                    <label for="dispute-reason">Reason</label>
+                    <select id="dispute-reason" required></select>
+
+                    <label for="dispute-description">Short description</label>
+                    <textarea id="dispute-description" rows="3" maxlength="500" required></textarea>
+
+                    <label for="dispute-evidence-note">Evidence note (optional)</label>
+                    <textarea id="dispute-evidence-note" rows="2" maxlength="300"></textarea>
+                    <p class="bid-error" id="report-issue-error" role="alert"></p>
+                    <div class="bid-actions">
+                        <button class="bid-cancel" id="cancel-report-issue" type="button">Cancel</button>
+                        <button class="primary-button" type="submit">Submit issue</button>
+                    </div>
+                </form>
+                <p class="bid-success" id="report-issue-success" role="status" hidden></p>
+                <button class="primary-button" id="report-issue-done" type="button" hidden>Done</button>
+            </div>
+        </dialog>
+
+        <dialog class="bid-dialog" id="rating-dialog" aria-labelledby="rating-title">
+            <div class="bid-dialog-content">
+                <h2 id="rating-title">Rate this transaction</h2>
+                <p class="dialog-current-bid" id="rating-item-name"></p>
+                <p class="bid-minimum" id="rating-counterparty"></p>
+                <form id="rating-form">
+                    <label for="rating-score">Rating</label>
+                    <select id="rating-score" required>
+                        <option value="">Choose stars</option>
+                        <option value="5">5 stars</option>
+                        <option value="4">4 stars</option>
+                        <option value="3">3 stars</option>
+                        <option value="2">2 stars</option>
+                        <option value="1">1 star</option>
+                    </select>
+                    <label for="rating-comment">Comment (optional)</label>
+                    <textarea id="rating-comment" rows="2" maxlength="240"></textarea>
+                    <p class="bid-error" id="rating-error" role="alert"></p>
+                    <div class="bid-actions">
+                        <button class="bid-cancel" id="cancel-rating" type="button">Cancel</button>
+                        <button class="primary-button" type="submit">Submit rating</button>
+                    </div>
+                </form>
+            </div>
+        </dialog>
+
+        
+
+        <dialog class="bid-dialog notification-dialog" id="notification-dialog" aria-labelledby="notification-title">
+            <div class="bid-dialog-content">
+                <div class="product-dialog-header">
+                    <div>
+                        <h2 id="notification-title">Notifications</h2>
+                        <p class="product-details-meta">Your updates · saved in this browser</p>
+                    </div>
+                    <button class="bid-cancel" id="close-notifications" type="button" aria-label="Close notifications">Close</button>
+                </div>
+                <button class="secondary-button" id="mark-notifications-read" type="button">Mark all read</button>
+                <p id="notification-empty" role="status" hidden>No notifications yet.</p>
+                <ul class="notification-list" id="notification-list"></ul>
+            </div>
+        </dialog>
+
+        
+
+        <dialog class="bid-dialog usability-dialog" id="usability-feedback-dialog" aria-labelledby="usability-feedback-title">
+            <div class="bid-dialog-content">
+                <h2 id="usability-feedback-title">Share feedback</h2>
+                <p class="bid-minimum">Feedback is saved only in this browser, not sent to a research team. Do not include names, contact details, addresses, or payment information.</p>
+                <form id="usability-feedback-form">
+                    
+                    
+                    
+                    
+                    <label for="feedback-journey">Journey tested</label>
+                    <select id="feedback-journey" required>
+                        <option value="">Choose a journey</option>
+                        <option value="buyer">Buyer</option>
+                        <option value="seller">Seller</option>
+                        <option value="both">Both</option>
+                    </select>
+                    <fieldset class="usability-score-fields">
+                        <legend>Rate each from 1 to 5</legend>
+                        <label for="feedback-conceptClarity">Concept clarity</label>
+                        <select id="feedback-conceptClarity" required><option value="">Choose</option><option>1</option><option>2</option><option>3</option><option>4</option><option>5</option></select>
+                        <label for="feedback-trust">Trust in the process</label>
+                        <select id="feedback-trust" required><option value="">Choose</option><option>1</option><option>2</option><option>3</option><option>4</option><option>5</option></select>
+                        <label for="feedback-biddingClarity">Bidding clarity</label>
+                        <select id="feedback-biddingClarity" required><option value="">Choose</option><option>1</option><option>2</option><option>3</option><option>4</option><option>5</option></select>
+                        <label for="feedback-inspectionPaymentClarity">Inspection / payment clarity</label>
+                        <select id="feedback-inspectionPaymentClarity" required><option value="">Choose</option><option>1</option><option>2</option><option>3</option><option>4</option><option>5</option></select>
+                        <label for="feedback-easeOfUse">Ease of use</label>
+                        <select id="feedback-easeOfUse" required><option value="">Choose</option><option>1</option><option>2</option><option>3</option><option>4</option><option>5</option></select>
+                    </fieldset>
+                    <fieldset>
+                        <legend>About the transaction flow</legend>
+                        <label for="feedback-winnerCommitmentClear">Was the winner commitment clear?</label>
+                        <select id="feedback-winnerCommitmentClear" required><option value="">Choose</option><option value="yes">Yes</option><option value="no">No</option><option value="unsure">Unsure</option></select>
+                        <label for="feedback-reservationDepositUnderstandable">Was the reservation deposit understandable?</label>
+                        <select id="feedback-reservationDepositUnderstandable" required><option value="">Choose</option><option value="yes">Yes</option><option value="no">No</option><option value="unsure">Unsure</option></select>
+                        <label for="feedback-handoverChoiceAppropriate">Was the handover / inspection choice appropriate?</label>
+                        <select id="feedback-handoverChoiceAppropriate" required><option value="">Choose</option><option value="yes">Yes</option><option value="no">No</option><option value="unsure">Unsure</option></select>
+                        <label for="feedback-onPlatformValueSufficient">Did the platform provide enough reason to complete on-platform?</label>
+                        <select id="feedback-onPlatformValueSufficient" required><option value="">Choose</option><option value="yes">Yes</option><option value="no">No</option><option value="unsure">Unsure</option></select>
+                    </fieldset>
+                    <label for="feedback-confusing">What was confusing?</label>
+                    <textarea id="feedback-confusing" rows="2" maxlength="500"></textarea>
+                    <label for="feedback-prevent-use">What would prevent use?</label>
+                    <textarea id="feedback-prevent-use" rows="2" maxlength="500"></textarea>
+                    <label for="feedback-valuable">What felt most valuable?</label>
+                    <textarea id="feedback-valuable" rows="2" maxlength="500"></textarea>
+                    <label for="feedback-buy-category">What would you most likely buy on Urbids?</label>
+                    <select id="feedback-buy-category" required>
+                        <option value="">Choose a category</option>
+                        <option value="electronics">Electronics</option>
+                        <option value="furniture">Furniture</option>
+                        <option value="home_appliances">Home appliances</option>
+                        <option value="fashion">Fashion</option>
+                        <option value="books_collectibles">Books / collectibles</option>
+                        <option value="other">Other</option>
+                    </select>
+                    <label for="feedback-sell-category">What would you most likely sell on Urbids?</label>
+                    <select id="feedback-sell-category" required>
+                        <option value="">Choose a category</option>
+                        <option value="electronics">Electronics</option>
+                        <option value="furniture">Furniture</option>
+                        <option value="home_appliances">Home appliances</option>
+                        <option value="fashion">Fashion</option>
+                        <option value="books_collectibles">Books / collectibles</option>
+                        <option value="other">Other</option>
+                    </select>
+                    <p class="bid-error" id="usability-feedback-error" role="alert"></p>
+                    <div class="bid-actions">
+                        <button class="bid-cancel" id="close-usability-feedback" type="button">Close</button>
+                        <button class="primary-button" id="submit-usability-feedback" type="submit">Save feedback</button>
+                    </div>
+                </form>
+                <p class="bid-success" id="usability-feedback-success" role="status" hidden>Thank you. Your feedback is saved in this browser.</p>
+                <button class="primary-button" id="close-usability-feedback-success" type="button" hidden>Done</button>
+            </div>
+        </dialog>
+
+        
+
+        
+
+        <dialog class="bid-dialog" id="auction-management-dialog" aria-labelledby="auction-management-title">
+            <div class="bid-dialog-content">
+                <div class="product-dialog-header">
+                    <h2 id="auction-management-title">Manage auction</h2>
+                    <button class="bid-cancel" id="close-auction-management" type="button">Close</button>
+                </div>
+                <p id="auction-management-item"></p>
+                <p id="auction-management-stats" class="bid-minimum"></p>
+                <div id="auction-management-actions" class="auction-management-actions"></div>
+                <form id="auction-management-form" hidden>
+                    <h3 id="auction-management-form-title"></h3>
+                    <fieldset id="auction-edit-details">
+                        <legend>Listing details (locked after the first bid)</legend>
+                        <label for="auction-edit-title">Title</label><input id="auction-edit-title" required>
+                        <label for="auction-edit-brand">Brand/model</label><input id="auction-edit-brand" required>
+                        <label for="auction-edit-description">Description</label><textarea id="auction-edit-description" required></textarea>
+                        <label for="auction-edit-location">Location</label><input id="auction-edit-location" required>
+                    </fieldset>
+                    <fieldset id="auction-edit-economics">
+                        <legend>Auction prices and duration</legend>
+                        <label for="auction-edit-start">Starting bid (INR)</label><input id="auction-edit-start" type="number" min="1" step="1" required>
+                        <label for="auction-edit-increment">Bid increment</label><select id="auction-edit-increment" required></select>
+                        <label for="auction-edit-buy">Buy Now (INR, optional)</label><input id="auction-edit-buy" type="number" min="1" step="1">
+                        
+                        <label for="auction-edit-duration">Duration</label><select id="auction-edit-duration"><option value="24">24 hours</option><option value="48">48 hours</option><option value="72">72 hours</option><option value="168">168 hours</option></select>
+                    </fieldset>
+                    <fieldset id="auction-offer-fields">
+                        <legend>Private second-chance offer</legend>
+                        <label for="auction-offer-bidder">Prior bidder</label><select id="auction-offer-bidder" required></select>
+                        <label for="auction-offer-price">Offer price (INR)</label><input id="auction-offer-price" type="number" min="1" step="1" required>
+                        <p class="bid-minimum">The offer is valid for 12 hours at the recipient's final valid bid amount.</p>
+                    </fieldset>
+                    <fieldset id="auction-availability-fields" hidden disabled>
+                        <legend>Confirm item availability</legend>
+                        <p>Confirm whether the item is still available before offering it again.</p>
+                        <label><input type="radio" name="auction-availability" value="yes" required> The item is still available</label>
+                        <label><input type="radio" name="auction-availability" value="no" required> The item is no longer available</label>
+                        <label><input type="checkbox" id="auction-availability-review" required> I reviewed the price, fulfilment option and auction duration before continuing.</label>
+                    </fieldset>
+                    <fieldset id="auction-correction-fields" hidden disabled>
+                        <legend>Corrected listing details</legend>
+                        <p id="auction-correction-reason"></p>
+                        <label for="auction-correction-title">Listing title</label><input id="auction-correction-title" maxlength="100" required>
+                        <label for="auction-correction-brand-model">Brand, model and variant</label><input id="auction-correction-brand-model" maxlength="120" required>
+                        <label for="auction-correction-condition">Condition</label>
+                        <select id="auction-correction-condition"><option value="A+">Like New</option><option value="A">Excellent</option><option value="B">Good</option><option value="C">Fair</option></select>
+                        <label for="auction-correction-functional">Functional status</label><textarea id="auction-correction-functional" rows="2" maxlength="300"></textarea>
+                        <label for="auction-correction-defects">Known defects</label><textarea id="auction-correction-defects" rows="2" maxlength="300"></textarea>
+                        <label for="auction-correction-accessories">Included accessories</label><textarea id="auction-correction-accessories" rows="2" maxlength="300"></textarea>
+                        <label for="auction-correction-serial">Model / identifier details (no full serial/IMEI)</label><input id="auction-correction-serial" maxlength="120">
+                        <label for="auction-correction-activation">Activation-lock status</label><input id="auction-correction-activation" maxlength="100">
+                        <label for="auction-correction-proof">Proof-of-purchase status</label><input id="auction-correction-proof" maxlength="100">
+                        <label for="auction-correction-description">Description</label><textarea id="auction-correction-description" rows="3" maxlength="1000"></textarea>
+                        <label for="auction-correction-photos">Photos for this browser session</label><input id="auction-correction-photos" type="file" accept="image/*" multiple>
+                        <p class="bid-minimum">Photos are temporary and will not persist after refresh.</p>
+                        <label><input type="checkbox" id="auction-correction-ack" required> I acknowledge that the corrected listing is accurate.</label>
+                    </fieldset>
+                    <fieldset id="auction-cancellation-fields" hidden disabled>
+                        <legend>Cancellation reason (optional)</legend>
+                        <label for="auction-cancellation-reason">Brief private reason</label>
+                        <textarea id="auction-cancellation-reason" maxlength="200" rows="2"></textarea>
+                    </fieldset>
+                    <label id="auction-management-confirm-wrap" hidden><input id="auction-management-confirm" type="checkbox"> I confirm this action. Earlier auction records will be preserved.</label>
+                    <button class="primary-button" type="submit">Save / confirm</button>
+                </form>
+                <p id="auction-management-error" class="form-error" role="alert"></p>
+                <p id="auction-management-success" role="status"></p>
+            </div>
+        </dialog>
+
+        <dialog class="bid-dialog product-dialog" id="product-details-dialog" aria-labelledby="product-details-title">
+            <div class="bid-dialog-content product-dialog-content">
+                <div class="product-detail-grid">
+                    <div class="product-detail-media">
+                        <img class="product-detail-image" id="product-details-image" alt="">
+                        <div class="product-detail-placeholder" id="product-details-placeholder" hidden></div>
+                        <div class="product-detail-thumbnails" id="product-details-thumbnails" role="group" aria-label="Product photos" hidden></div>
+                    </div>
+                    <div class="product-detail-purchase">
+                        <div class="product-dialog-header">
+                            <div>
+                                <h2 id="product-details-title"></h2>
+                                <p class="product-details-meta"><span id="product-details-condition"></span><span aria-hidden="true"> · </span><span id="product-details-location"></span></p>
+                            </div>
+                            <button class="bid-cancel" id="close-product-details" type="button" aria-label="Close product details">Close</button>
+                        </div>
+                        <p class="product-details-brand" id="product-details-brand"></p>
+                        <p class="product-details-meta" id="product-details-listing-format"></p>
+                        <p class="bid-minimum" id="product-details-correction-notice" role="status" hidden>Listing details were corrected after the previous transaction.</p>
+                        <div class="seller-profile-compact">
+                            <span class="seller-profile-avatar" id="product-details-seller-avatar" aria-hidden="true">KS</span>
+                            <div class="seller-profile-copy">
+                                <h3 class="product-section-heading">Seller</h3>
+                                <div class="seller-profile-heading"><button class="seller-link" id="product-details-seller" type="button"></button></div>
+                                <p id="product-details-seller-location"></p>
+                                <p><button class="seller-link" id="product-details-seller-reputation" type="button"><span id="product-details-rating"></span><span aria-hidden="true"> · </span><span id="product-details-seller-transactions"></span><span class="visually-hidden">. View seller profile and reviews</span></button><span aria-hidden="true"> · </span><span id="product-details-seller-member-since"></span></p>
+                            </div>
+                        </div>
+                        <div class="product-details-price-block">
+                            <span class="product-price-label">Current bid</span>
+                            <strong class="product-details-price" id="product-details-bid"></strong>
+                            <span class="product-details-meta"><span id="product-details-bid-count"></span><span aria-hidden="true"> · </span><span id="product-details-end"></span></span>
+                        </div>
+                        <p class="product-details-buy-now" id="product-details-buy-now-price"></p>
+                        <details class="bid-history">
+                            <summary>View bid history</summary>
+                            <p class="bid-minimum">Only bids placed in this browser are recorded; sample bid totals may be higher.</p>
+                            <ul id="product-details-bid-history" class="activity-list"></ul>
+                        </details>
+                        <p class="product-details-minimum" id="product-details-minimum-bid"></p>
+                        <p class="market-signals" id="product-details-market-signals"></p>
+                        <div class="bid-actions product-detail-actions">
+                            <button class="primary-button" id="product-details-place-bid" type="button">Place bid</button>
+                            <button class="primary-button" id="product-details-primary" type="button" hidden></button>
+                            <button class="bid-cancel" id="product-details-decline-offer" type="button" hidden>Decline offer</button>
+                            <button class="bid-cancel" id="product-details-cancel-purchase" type="button" hidden>Cancel purchase</button>
+                            <button class="buy-now-button" id="product-details-buy-now-button" type="button">Buy now</button>
+                            <button class="watch-button detail-watch-button" id="product-details-watch" type="button" aria-pressed="false">Save</button>
+                        </div>
+                        <h3 class="product-section-heading">Trust and safety</h3>
+                        <p class="detail-trust-note" id="product-details-trust-note"></p>
+                        <p class="transaction-status" id="product-details-auction-status" role="status"></p>
+                        <div id="product-details-transaction-timeline" class="product-transaction-timeline" hidden></div>
+                        <button class="bid-cancel" id="product-details-report-issue" type="button" hidden>Report an issue</button>
+                    </div>
+                </div>
+                <div class="product-detail-sections">
+                    <div class="product-detail-section product-detail-description">
+                        <h3 class="product-section-heading">About this item</h3>
+                        <p id="product-details-description"></p>
+                        <p id="product-details-accessories"></p>
+                    </div>
+                    <details class="product-detail-section product-detail-specifications" open>
+                        <summary>Details</summary>
+                        <dl id="product-details-specifications" class="product-specification-list"></dl>
+                    </details>
+                    <div class="product-detail-section product-detail-fulfilment">
+                        <h3 class="product-section-heading">Collection and delivery</h3>
+                        <p id="product-details-fulfilment"></p>
+                    </div>
+                </div>
+            </div>
+        </dialog>
+
+        <dialog class="bid-dialog" id="seller-listing-dialog" aria-labelledby="seller-listing-title">
+            <div class="bid-dialog-content">
+                <h2 id="seller-listing-title">Create a listing</h2>
+                <p class="bid-minimum">Explore selling a desirable, quality pre-owned item. This research submission stays in this browser and is not a real offer to sell.</p>
+                <form class="seller-listing-form" id="seller-listing-form">
+                    <fieldset>
+                        <legend>Product</legend>
+                    <label for="seller-item-title">Item title</label>
+                    <input id="seller-item-title" name="title" type="text" maxlength="100" aria-describedby="seller-listing-error" required>
+
+                    <label for="seller-brand-model">Brand / model</label>
+                    <input id="seller-brand-model" name="brandModel" type="text" maxlength="100" aria-describedby="seller-listing-error" required>
+
+                    <label for="seller-estimated-value">Estimated item value (INR)</label>
+                    <input id="seller-estimated-value" name="estimatedValue" type="number" min="1" step="1" aria-describedby="seller-listing-error">
+
+                    <label for="seller-category">Category</label>
+                    <select id="seller-category" name="category" aria-describedby="seller-listing-error" required></select>
+
+                    <label for="seller-subcategory">Subcategory</label>
+                    <select id="seller-subcategory" name="subcategory" aria-describedby="seller-listing-error" required></select>
+
+                    <label for="seller-condition">Condition</label>
+                    <select id="seller-condition" name="condition" aria-describedby="seller-listing-error" required></select>
+                    <p class="seller-condition-guidance" id="seller-condition-guidance">Condition grades are seller-reported; describe defects and wear clearly.</p>
+                    </fieldset>
+
+                    <fieldset>
+                        <legend>Collection and delivery</legend>
+                        <label for="seller-fulfilment-method">Fulfilment</label>
+                        <select id="seller-fulfilment-method" name="fulfilmentMethod" aria-describedby="seller-listing-error" required></select>
+                    </fieldset>
+
+                    <fieldset>
+                        <legend>Details</legend>
+                    <label for="seller-description">Description</label>
+                    <textarea id="seller-description" name="description" rows="4" maxlength="1000" aria-describedby="seller-listing-error" required></textarea>
+                    <p class="bid-minimum">Do not include contact details, private addresses, account credentials, or full device identifiers.</p>
+
+                    <label for="seller-photos">Product photos</label>
+                    <input id="seller-photos" name="photos" type="file" accept="image/*" multiple aria-describedby="seller-photo-note seller-listing-error">
+                    <p class="bid-minimum" id="seller-photo-note">Add clear photos showing the product, condition and relevant details. Photos stay in this browser and are not uploaded.</p>
+                    <div class="seller-photo-previews" id="seller-photo-previews" aria-live="polite"></div>
+
+                    <label for="seller-location">City / area only</label>
+                    <input id="seller-location" name="location" type="text" aria-describedby="seller-listing-error" required>
+                    <p class="bid-minimum">Do not enter a private address. Public listings show only the pilot city.</p>
+                    </fieldset>
+
+                    <fieldset class="seller-specifications">
+                        <legend>Product specifications</legend>
+                        <p class="bid-minimum">Add the details relevant to your item, including condition, wear and any missing parts. Never enter full serial numbers or credentials.</p>
+                        <div id="seller-specification-fields" class="seller-specification-fields"></div>
+                    </fieldset>
+
+                    <fieldset>
+                        <legend>Pricing</legend>
+                    <p class="bid-minimum">Choose an auction, Buy Now, or both.</p>
+                    <label for="seller-listing-format">Listing format</label>
+                    <select id="seller-listing-format" name="listingFormat" required>
+                        <option value="auction">Auction</option>
+                        <option value="buy_now">Buy Now</option>
+                        <option value="auction_buy_now">Auction + Buy Now</option>
+                    </select>
+                    <div id="seller-auction-pricing">
+                    <label for="seller-starting-bid">Starting bid (INR)</label>
+                    <input id="seller-starting-bid" name="startingBid" type="number" min="1" step="1" aria-describedby="seller-listing-error" required>
+                    <label for="seller-bid-increment">Bid increment</label>
+                    <select id="seller-bid-increment" name="bidIncrement" required></select>
+                    </div>
+
+                    <div id="seller-buy-now-controls">
+                    <label for="seller-buy-now">Buy Now price (INR)</label>
+                    <input id="seller-buy-now" name="buyNowPrice" type="number" min="1" step="1" aria-describedby="seller-listing-error">
+                    </div>
+                    <p class="seller-price-guidance" id="seller-price-guidance" aria-live="polite">Choose a subcategory to see a sample-based price range.</p>
+
+                    <div id="seller-auction-duration-wrap">
+                    <label for="seller-auction-duration">Auction duration</label>
+                    <select id="seller-auction-duration" name="auctionDurationHours" aria-describedby="seller-listing-error" required></select>
+                    </div>
+
+                    
+                    </fieldset>
+
+                    <fieldset class="seller-review-group">
+                        <legend>Review</legend>
+                        <dl class="seller-review-summary">
+                            <div><dt>Item</dt><dd id="seller-summary-title">Add an item title</dd></div>
+                            <div><dt>Brand / model</dt><dd id="seller-summary-brand">Not entered</dd></div>
+                            <div><dt>Category, subcategory and condition</dt><dd id="seller-summary-category">Not selected</dd></div>
+                            <div><dt>Description</dt><dd id="seller-summary-description">Not entered</dd></div>
+                            <div><dt>Photos</dt><dd id="seller-summary-photos">None selected</dd></div>
+                            <div><dt>Location</dt><dd id="seller-summary-location">Not entered</dd></div>
+                            <div><dt>Estimated item value</dt><dd id="seller-summary-estimated-value">Not entered</dd></div>
+                            <div><dt>Fulfilment</dt><dd id="seller-summary-fulfilment">In-person collection</dd></div>
+                            <div><dt>Specifications</dt><dd id="seller-summary-specifications">None added</dd></div>
+                            <div><dt>Starting bid</dt><dd id="seller-summary-starting-bid">Not entered</dd></div>
+                            <div><dt>Bid increment</dt><dd id="seller-summary-bid-increment"></dd></div>
+                            <div><dt>Buy Now</dt><dd id="seller-summary-buy-now">Not set</dd></div>
+                            <div><dt>Listing format</dt><dd id="seller-summary-format">Auction</dd></div>
+                            <div><dt>Auction duration</dt><dd id="seller-summary-duration">72 hours</dd></div>
+                            
+                        </dl>
+                    <p class="bid-error" id="seller-listing-error" role="alert"></p>
+                    <div class="bid-actions">
+                        <button class="bid-cancel" id="cancel-seller-listing" type="button">Cancel</button>
+                        <button class="primary-button" type="submit">Submit for review</button>
+                    </div>
+                    </fieldset>
+                </form>
+                <p class="bid-success" id="seller-listing-success" role="status" hidden></p>
+                <button class="primary-button" id="seller-listing-done" type="button" hidden>Done</button>
+            </div>
+        </dialog>
+
+        <section id="how-it-works">
+            <div class="container">
+                <h2 class="section-title">How Urbids works</h2>
+                <div class="public-journeys">
+                    <div><h3>Buying</h3><p>Compare quality and seller-provided details, bid or choose Buy Now, then select a suitable handover. Inspection depends on the product and its risks.</p></div>
+                    <div><h3>Selling</h3><p>Share clear item information, receive bids or Buy Now interest, and complete an agreed handover. Completed transactions and ratings build reputation.</p></div>
+                </div>
+                <a href="#public-how" data-public-topic="public-how">How it works</a>
+            </div>
+        </section>
+
+        <section id="sell">
+            <div class="container">
+                <h2 class="section-title">Have something worth passing on?</h2>
+                <p>List your item for Mumbai buyers looking for quality pre-owned goods.</p>
+                <button class="primary-button" id="start-listing-button" type="button">Start a listing</button>
+                <div class="seller-submissions" id="seller-submissions-panel" hidden>
+                    <h3>My submissions</h3>
+                    <ul class="seller-submission-list" id="seller-submission-list"></ul>
+                </div>
+            </div>
+        </section>
+
+        
+        <section class="account-area" id="account-area" aria-labelledby="account-heading" hidden>
+            <div class="container account-layout">
+                <div class="account-header">
+                    <button class="secondary-button account-back" id="account-back" type="button">&larr; Back to marketplace</button>
+                    <h1 id="account-heading" tabindex="-1">Account</h1>
+                    <p class="product-details-meta" id="account-user"></p>
+                </div>
+                <div class="account-tabs-scroll">
+                    <div class="account-tabs" id="account-sections" role="tablist" aria-label="Account sections">
+                        <button type="button" role="tab" id="account-tab-activity" data-section="activity" aria-controls="account-panel">My Activity</button>
+                        <button type="button" role="tab" id="account-tab-profile" data-section="profile" aria-controls="account-panel">Profile and reviews</button>
+                        <button type="button" role="tab" id="account-tab-details" data-section="details" aria-controls="account-panel">Account details</button>
+                    </div>
+                </div>
+                <div class="account-panel" id="account-panel" role="tabpanel"></div>
+                <p class="visually-hidden" id="account-live" role="status" aria-live="polite"></p>
+            </div>
+        </section>
+
+        <section class="account-area" id="public-profile-view" aria-labelledby="public-profile-heading" hidden>
+            <div class="container account-layout">
+                <div class="account-header">
+                    <button class="secondary-button account-back" id="public-profile-back" type="button">&larr; Back to listing</button>
+                    <h1 id="public-profile-heading" tabindex="-1">Seller profile</h1>
+                </div>
+                <div id="public-profile-content"></div>
+            </div>
+        </section>
+    </main>
+
+    <dialog class="bid-dialog public-info-dialog" id="public-info-dialog" aria-labelledby="public-info-title">
+        <div class="bid-dialog-content">
+            <div class="public-info-header">
+                <h2 id="public-info-title">About Urbids</h2>
+                <button class="bid-cancel" id="close-public-info" type="button">Close</button>
+            </div>
+            <nav class="public-topic-nav" aria-label="Help topics">
+                <a href="#public-about" data-public-topic="public-about">About</a>
+                <a href="#public-how" data-public-topic="public-how">How it works</a>
+                <a href="#public-safety" data-public-topic="public-safety">Safety</a>
+                <a href="#public-faq" data-public-topic="public-faq">FAQ</a>
+                <a href="#public-privacy" data-public-topic="public-privacy">Privacy</a>
+                <a href="#public-contact" data-public-topic="public-contact">Contact us</a>
+            </nav>
+            <article id="public-about" data-public-title="About Urbids" hidden>
+                <p>Urbids is exploring a resale marketplace for quality pre-owned products. Buyers can discover prices through auctions or choose a clear Buy Now price.</p>
+                <p>Detailed listings, seller and buyer reputation, and flexible handover options help people make informed choices. Inspection is suggested when the product or its risks call for it, not as a requirement for every item or transaction.</p>
+                <p>Urbids does not own inventory, professionally refurbish items, verify or authenticate products, or guarantee an outcome.</p>
+                <p>This is a research prototype. Listings, people, ratings and transaction outcomes are fictional; nothing here is a real offer to buy or sell.</p>
+                <p class="public-info-note">Urbids is a working name. Domain and trademark availability have not been checked.</p>
+            </article>
+            <article id="public-how" data-public-title="How it works" hidden>
+                <h3>For buyers</h3>
+                <ol class="public-process"><li>Compare item details, condition and seller reputation.</li><li>Bid to discover a price or choose Buy Now.</li><li>Choose from the handover options available for that item.</li><li>Inspect when its category and risks make a check useful.</li><li>Confirm receipt to complete the transaction.</li></ol>
+                <h3>For sellers</h3>
+                <ol class="public-process"><li>Describe the item clearly, including its condition.</li><li>Receive bids or Buy Now interest.</li><li>Agree a suitable handover with the buyer.</li><li>Build reputation through completed transactions and ratings.</li></ol>
+                <p class="public-info-note">All steps on this site are simulations for research, not real transactions.</p>
+            </article>
+            <article id="public-safety" data-public-title="Safety and trust" hidden>
+                <ul class="public-guidance">
+                    <li>Condition is seller-declared. Urbids does not verify ownership, authenticity or product condition.</li>
+                    <li>Inspect higher-risk items when appropriate, especially smartphones and laptops. Check the model, disclosed defects and included items.</li>
+                    <li>Prefer busy public meetup locations. Do not share a home address in a listing or feedback.</li>
+                    <li>Keep transaction actions on-platform so the agreed terms, handover and any issues remain together. This is not a guarantee of protection.</li>
+                    <li>Never share an OTP, PIN, password or payment credentials.</li>
+                    <li>Report a material mismatch, such as a wrong model or undisclosed fault, through the transaction's issue option before confirming completion.</li>
+                    <li>Prototype deposits, payments and refunds are simulated. Do not transfer money or enter real payment details.</li>
+                </ul>
+            </article>
+            <article class="public-faq" id="public-faq" data-public-title="Frequently asked questions" hidden>
+                <details><summary>How does bidding work?</summary><p>Place the displayed next bid. The highest eligible accepted bid at auction close wins. A valid late bid can extend the auction by two minutes, up to three times.</p></details>
+                <details><summary>Who chooses the bid increment?</summary><p>The seller chooses the auction's increment. Each next bid adds that fixed amount; buyers do not choose a custom manual amount.</p></details>
+                <details><summary>How does automatic bidding work?</summary><p>Set a private maximum and Urbids bids only when needed, using the seller's increment and never exceeding your limit. You can increase it later. Equal eligible maxima favour the earlier maximum. Other buyers and the seller do not see your limit. It is saved in this browser, not in a secure online account.</p></details>
+                <details><summary>What happens if I win?</summary><p>Confirm within six hours, review any simulated reservation deposit and choose an available handover option. This prototype does not arrange a real sale.</p></details>
+                <details><summary>What is the reservation deposit?</summary><p>A proposed commitment step, credited toward the final price on completion. The prototype illustrates no deposit below ₹5,000, ₹200 from ₹5,000 to ₹15,000, and ₹500 above ₹15,000. No money is collected; these values require review before a live service.</p></details>
+                <details><summary>Is a meetup mandatory?</summary><p>No. Available handover options depend on the listing and item. Eligible items may use simple collection; public meet-and-inspect is available when appropriate. Shipping is only a research simulation.</p></details>
+                <details><summary>When should I inspect?</summary><p>It depends on the item and its risks. Phones and laptops may benefit from technical checks; furniture from a condition and dimensions check; appliances from an operating check; and fashion from a condition check. Books and collectibles may need only a simple condition check. Follow the listing's guidance; inspection is not authentication or a guarantee.</p></details>
+                <details><summary>What if the item differs from its listing?</summary><p>Use the transaction's issue option to report a material mismatch before confirming completion. A wrong model or undisclosed fault differs from a change of mind. Issue handling and any refund shown here are simulations, not a promise of recovery.</p></details>
+                <details><summary>What are second-chance offers?</summary><p>After an eligible failed sale, a seller may offer the item to a previous bidder at that bidder's own accepted price. Offers are made one at a time and expire after 12 hours. They are simulated here.</p></details>
+                <details><summary>Is this a real marketplace yet?</summary><p>No. This is a browser-local research prototype with fictional listings and profiles. Public access does not create real accounts, payments, deliveries or transactions.</p></details>
+            </article>
+            <article id="public-privacy" data-public-title="Prototype privacy notice" hidden>
+                <p>Prototype records are saved in this browser. There are no real accounts, and other browsers or devices do not share your activity.</p>
+                <p>Listings, profiles, bids, watchlists and feedback are stored locally in this browser. Other testers and browsers are not connected, so bids and activity are not shared.</p>
+                <p>Do not enter sensitive information in feedback, listings or other fields. Use no real names, contact details, addresses, full device identifiers or payment information. No real payment data should be entered anywhere.</p>
+                <p>Feedback is not sent to a research team. During a facilitated session, let the researcher know if you saved feedback; this form does not send a message. Clearing this site's browser data removes local prototype records.</p>
+                <p>The public website host and external image providers receive requests when pages or images load. Browser-local prototype records are not uploaded by the app; this notice does not describe those providers' own practices.</p>
+                <p class="public-info-note">This is prototype/research wording, not a production privacy policy or a legal promise. It requires legal review before production.</p>
+            </article>
+            <article id="public-contact" data-public-title="Contact and feedback" hidden>
+                <p>Share what was clear, confusing or missing. Please leave out sensitive information and contact or payment details.</p>
+                <p>Your feedback stays in this browser. During a facilitated session, let the researcher know you have saved it; the form does not send a message or support request.</p>
+                <button class="primary-button" id="public-share-feedback" type="button">Share feedback</button>
+                <p id="research-contact-placeholder">A dedicated research contact address has not been added yet.</p>
+                <p id="research-contact-link" hidden><a id="research-contact-email">Contact us by email</a></p>
+            </article>
+        </div>
+    </dialog>
+
+    <footer id="public-help">
+        <div class="container footer-content">
+            <div class="footer-brand"><strong>Urbids</strong><span>Working name</span></div>
+            <nav class="public-footer-nav" aria-label="About and help">
+                <a href="#public-about" data-public-topic="public-about">About</a>
+                <a href="#public-how" data-public-topic="public-how">How it works</a>
+                <a href="#public-safety" data-public-topic="public-safety">Safety</a>
+                <a href="#public-faq" data-public-topic="public-faq">FAQ</a>
+                <a href="#public-privacy" data-public-topic="public-privacy">Privacy</a>
+                <a href="#public-contact" data-public-topic="public-contact">Contact us</a>
+            </nav>
+            <button class="secondary-button" id="share-feedback-footer" type="button">Share feedback</button>
+        </div>
+        <p class="container footer-prototype-note">Buy and sell quality pre-owned products • Research prototype • No real payments or transactions.</p>
+        
+    </footer>
+    <script type="module" src="app.js"></script>
+</body>
+</html>

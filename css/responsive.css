@@ -1,0 +1,579 @@
+@media (max-width: 1399px) {
+    .listings {
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+    }
+
+    .navigation {
+        gap: 16px;
+    }
+
+    .navigation-links {
+        gap: 12px;
+    }
+}
+
+@media (max-width: 850px) {
+    .listings {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+
+    .navigation {
+        grid-template-columns: auto minmax(130px, 1fr) auto auto;
+        gap: 8px;
+    }
+
+    .navigation-links a,
+    .navigation-links button {
+        font-size: var(--text-label);
+    }
+
+    .profile-control-copy {
+        display: none;
+    }
+}
+
+@media (max-width: 700px) {
+    .container {
+        width: min(100% - 28px, 1440px);
+    }
+
+    .navigation {
+        grid-template-columns: minmax(0, 1fr) auto auto auto auto;
+        min-height: 58px;
+        gap: 8px;
+    }
+
+    .brand {
+        font-size: var(--text-page-title);
+    }
+
+    .header-search {
+        display: none;
+    }
+
+    .navigation.search-open {
+        grid-template-rows: 58px auto;
+        padding-bottom: 9px;
+    }
+
+    .header-search.is-open {
+        position: static;
+        grid-column: 1 / -1;
+        grid-row: 2;
+        display: block;
+        padding: 0;
+    }
+
+    .header-search input {
+        min-height: var(--control-height);
+    }
+
+    .navigation-links {
+        display: none;
+    }
+
+    .mobile-search-toggle,
+    .mobile-watchlist-toggle,
+    .notification-center-button {
+        display: block;
+        min-height: 44px;
+        padding: 7px 8px;
+        background: transparent;
+        color: var(--color-primary);
+        font-size: var(--text-label);
+        font-weight: 700;
+    }
+
+    .mobile-search-toggle[aria-expanded="true"] {
+        border-radius: var(--radius-control);
+        background: var(--color-soft-green);
+    }
+
+    .mobile-menu {
+        position: relative;
+        display: block;
+    }
+
+    .mobile-menu > summary {
+        padding: 8px 2px;
+        min-height: 44px;
+        color: var(--color-ink);
+        font-size: var(--text-meta);
+        font-weight: 600;
+        list-style: none;
+        cursor: pointer;
+    }
+
+    .mobile-menu > summary::-webkit-details-marker {
+        display: none;
+    }
+
+    .mobile-menu nav {
+        position: absolute;
+        top: calc(100% + 8px);
+        right: 0;
+        z-index: 25;
+        display: grid;
+        min-width: 170px;
+        padding: 8px;
+        border: 1px solid var(--color-border);
+        border-radius: var(--radius-control);
+        background: var(--color-surface);
+        box-shadow: var(--shadow-card);
+    }
+
+    .mobile-menu a,
+    .mobile-menu button {
+        padding: 10px;
+        background: transparent;
+        color: var(--color-ink);
+        font-size: var(--text-meta);
+        text-align: left;
+        text-decoration: none;
+    }
+
+    .mobile-menu .mobile-profile-note {
+        padding: 7px 10px 0;
+        line-height: 1.4;
+    }
+
+    .category-nav-list {
+        width: 100%;
+        padding: 0 10px;
+    }
+
+    .category-subnav {
+        width: 100%;
+        min-height: 34px;
+        padding: 0 10px 6px;
+    }
+
+    .category-nav-button {
+        min-height: var(--control-height);
+        padding: 7px 11px;
+    }
+
+    .hero {
+        padding: 16px 0 13px;
+    }
+
+    .hero-content {
+        grid-template-columns: 1fr;
+        gap: 9px;
+    }
+
+    .hero h1 {
+        font-size: var(--text-page-title);
+    }
+
+    .hero p {
+        font-size: var(--text-meta);
+    }
+
+    .hero-actions {
+        grid-column: 1;
+        grid-row: auto;
+    }
+
+    .hero .hero-trust {
+        grid-column: 1;
+        margin-top: 0;
+        font-size: var(--text-label);
+    }
+
+    section {
+        padding: 19px 0;
+    }
+
+    .marketplace-heading {
+        align-items: start;
+        margin-bottom: 12px;
+    }
+
+    .section-title {
+        font-size: var(--text-page-title);
+    }
+
+    .listings-count {
+        padding-top: 4px;
+        font-size: var(--text-label);
+    }
+
+    .discovery-tabs {
+        min-height: var(--control-height);
+        padding-right: 14px;
+    }
+
+    .discovery-tab {
+        min-height: var(--control-height);
+        padding: 6px 11px;
+        font-size: var(--text-label);
+    }
+
+    .listing-filter-panel {
+        margin-bottom: 12px;
+        border: 1px solid var(--color-border);
+        border-radius: var(--radius-control);
+        background: var(--color-surface);
+    }
+
+    .listing-filter-panel > summary {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        min-height: var(--control-height);
+        padding: 8px 11px;
+        color: var(--color-ink);
+        font-size: var(--text-meta);
+        font-weight: 600;
+        list-style: none;
+        cursor: pointer;
+    }
+
+    .listing-filter-panel > summary::-webkit-details-marker {
+        display: none;
+    }
+
+    #filter-summary-count {
+        color: var(--color-muted);
+        font-size: var(--text-label);
+        font-weight: 500;
+    }
+
+    .listing-filters {
+        display: none;
+        padding: 10px;
+        border-top: 1px solid var(--color-border);
+    }
+
+    .listing-filter-panel[open] .listing-filters {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        align-items: end;
+        gap: 10px;
+    }
+
+    .condition-filter,
+    .price-filter,
+    .sort-filter {
+        min-width: 0;
+    }
+
+    .condition-filter select,
+    .price-filter input,
+    .sort-filter select {
+        width: 100%;
+        min-width: 0;
+    }
+
+    .watchlist-filter,
+    .buy-now-filter {
+        min-height: var(--control-height);
+        font-size: var(--text-label);
+    }
+
+    .listings {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 9px;
+    }
+
+    .listing-content {
+        gap: 5px;
+        padding: 9px;
+    }
+
+    .listing-content h3 {
+        min-height: 32px;
+        font-size: var(--text-card-title);
+    }
+
+    .listing-meta,
+    .listing-bid-info,
+    .listing-price-label,
+    .listing-price-options {
+        font-size: var(--text-label);
+    }
+
+    .price {
+        font-size: var(--text-card-price);
+    }
+
+    .listing-actions {
+        grid-template-columns: 1fr;
+    }
+
+    .listing-actions button {
+        min-height: 44px;
+        font-size: var(--text-label);
+    }
+
+    .community-listing-label,
+    .condition-badge {
+        top: 6px;
+        left: 6px;
+        padding: 4px 6px;
+        font-size: var(--text-label);
+    }
+
+    .condition-badge {
+        top: auto;
+        bottom: 6px;
+    }
+
+    .watch-button.card-watch-button {
+        top: 5px;
+        right: 5px;
+        width: 40px;
+        min-height: var(--control-height);
+    }
+
+    .bid-dialog.product-dialog {
+        width: min(96vw, 560px);
+        max-height: 92vh;
+    }
+
+    .product-dialog-content {
+        padding: var(--space-4);
+    }
+
+    .product-detail-grid {
+        grid-template-columns: 1fr;
+        gap: 14px;
+    }
+
+    .product-detail-media {
+        position: static;
+    }
+
+    .product-detail-image,
+    .product-detail-placeholder {
+        max-height: 280px;
+        aspect-ratio: 4 / 3;
+    }
+
+    .product-image-thumbnail {
+        flex-basis: 54px;
+        width: 54px;
+        height: 54px;
+    }
+
+    .product-detail-actions {
+        grid-template-columns: 1fr 1fr;
+    }
+
+    .product-detail-actions .detail-watch-button {
+        grid-column: 1 / -1;
+    }
+
+    button,
+    .listing-title-button,
+    .prototype-tool-button,
+    .account-action,
+    .account-subtab,
+    .account-tabs button,
+    .account-filter,
+    .account-back,
+    .watch-button.card-watch-button,
+    .listing-gallery-arrow,
+    .category-nav-button,
+    .subcategory-nav-button,
+    .discovery-tab,
+    .listing-filter-panel > summary,
+    .mobile-menu > summary {
+        min-height: 44px;
+        min-width: 44px;
+    }
+
+    .bid-dialog input:not([type="checkbox"]):not([type="radio"]),
+    .bid-dialog select,
+    .bid-dialog textarea {
+        min-height: 44px;
+        /* Keep iOS from zooming when a text control receives focus. */
+        font-size: var(--text-input);
+    }
+
+    .mobile-menu a,
+    .mobile-menu button,
+    .inspection-checklist label {
+        min-height: 44px;
+    }
+
+    .activity-transaction-timeline {
+        width: 100%;
+    }
+
+    .listing-title-button {
+        width: 100%;
+    }
+
+    .seller-review-summary {
+        grid-template-columns: 1fr;
+    }
+
+    .steps {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+
+    .step {
+        min-height: 66px;
+        padding: 9px;
+    }
+
+    .step + .step {
+        border-left: 0;
+    }
+
+    .step:nth-child(even) {
+        border-left: 1px solid var(--color-border);
+    }
+
+    .step:nth-child(n + 3) {
+        border-top: 1px solid var(--color-border);
+    }
+
+    .seller-listing-form fieldset {
+        grid-template-columns: 1fr;
+    }
+
+    .seller-submission-item {
+        flex-direction: column;
+        gap: 8px;
+    }
+
+}
+
+@media (max-width: 480px) {
+    .bid-summary {
+        grid-template-columns: minmax(0, 1fr);
+        gap: var(--space-1);
+    }
+
+    .bid-summary > div {
+        display: grid;
+        grid-template-columns: minmax(0, 1fr) auto;
+        align-items: center;
+        gap: var(--space-2);
+    }
+
+    .bid-summary dd {
+        margin: 0;
+        white-space: nowrap;
+    }
+
+    .product-detail-purchase .product-dialog-header {
+        display: grid;
+        grid-template-columns: minmax(0, 1fr) auto;
+        gap: var(--space-1) var(--space-2);
+    }
+
+    .product-detail-purchase .product-dialog-header > div {
+        display: contents;
+    }
+
+    .product-detail-purchase .product-dialog-header h2 {
+        grid-column: 1 / -1;
+    }
+
+    .product-detail-purchase .product-dialog-header > button {
+        align-self: center;
+    }
+}
+
+@media (max-width: 340px) {
+    .container {
+        width: calc(100% - 20px);
+    }
+
+    .hero {
+        padding: 6px 0 4px;
+    }
+
+    .hero-content {
+        gap: 4px;
+    }
+
+    .hero h1 {
+        font-size: var(--text-page-title);
+        line-height: 1.05;
+    }
+
+    .hero p {
+        font-size: var(--text-label);
+    }
+
+    .hero .primary-button,
+    .hero .secondary-button {
+        min-height: var(--control-height);
+        padding: var(--control-padding-block) var(--control-padding-inline);
+        font-size: var(--text-meta);
+    }
+
+    .hero .hero-trust {
+        font-size: var(--text-label);
+    }
+
+    #listings {
+        padding-top: 6px;
+    }
+
+    .marketplace-heading {
+        display: block;
+        margin-bottom: 6px;
+    }
+
+    .eyebrow {
+        display: none;
+    }
+
+    .marketplace-heading .section-title {
+        font-size: var(--text-section);
+        line-height: 1.1;
+    }
+
+    .marketplace-heading .listings-count {
+        display: none;
+    }
+
+    .discovery-tabs,
+    .listing-filter-panel {
+        margin-bottom: 4px;
+    }
+
+    .listing-content {
+        gap: 4px;
+        padding: 7px;
+    }
+
+    .listing-price-block {
+        margin-top: 0;
+    }
+
+    .listing-actions {
+        margin-top: 0;
+    }
+
+    .listings {
+        grid-template-columns: 1fr;
+    }
+
+    .navigation {
+        gap: 3px;
+    }
+
+    .discovery-tabs {
+        margin-right: -10px;
+        padding-right: 10px;
+    }
+
+    .mobile-search-toggle,
+    .mobile-watchlist-toggle,
+    .notification-center-button {
+        padding: 6px 3px;
+        font-size: var(--text-label);
+    }
+
+    .listing-actions {
+        grid-template-columns: 1fr 1fr;
+    }
+
+}
