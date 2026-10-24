@@ -81,7 +81,12 @@ export function createAuctionManagementService({ listingStates, transactionStore
                 && bid.bidderUserId !== listing.sellerUserId
                 && bid.bidderUserId !== transaction.buyerUserId
                 && bid.bidderUserId !== transaction.failedBuyerUserId
-                && !attempted.has(bid.bidderUserId)) lastBids.set(bid.bidderUserId, bid);
+                && !attempted.has(bid.bidderUserId)) {
+                const previous = lastBids.get(bid.bidderUserId);
+                if (!previous || Date.parse(bid.placedAt) > Date.parse(previous.placedAt)) {
+                    lastBids.set(bid.bidderUserId, bid);
+                }
+            }
         });
         const anonymous = new Map(biddingService.getBidHistory(listingId).map(row => [row.amount, row.label]));
         return Array.from(lastBids.values()).map(bid => ({
@@ -90,7 +95,7 @@ export function createAuctionManagementService({ listingStates, transactionStore
             placedAt: bid.placedAt,
             label: anonymous.get(bid.amount) || 'Prior bidder'
         })).sort((left, right) => right.amount - left.amount
-            || Date.parse(right.placedAt) - Date.parse(left.placedAt));
+            || Date.parse(left.placedAt) - Date.parse(right.placedAt));
     }
 
     function notifyRelistWhenExhausted(listingId) {
@@ -142,7 +147,7 @@ export function createAuctionManagementService({ listingStates, transactionStore
             view: true,
             manage: editable,
             edit: editable && noBids,
-            lowerBuyNow: editable && Number.isSafeInteger(listing.buyNowPrice) && listing.buyNowPrice > listing.currentBid + 1,
+            lowerBuyNow: editable && noBids && Number.isSafeInteger(listing.buyNowPrice) && listing.buyNowPrice > listing.currentBid + 1,
             endEarly: editable && noBids,
             unpublish: canUnpublish(listingId),
             relist: !listing.secondChanceOffer && !(listingId === recoverySourceId(listing) && hasApprovedCorrection(listingId)) && failedOutcome(listing)
@@ -547,7 +552,7 @@ export function createAuctionManagementService({ listingStates, transactionStore
             notificationService.create({
                 dedupeKey: `offer:${submission.id}:created`, recipientUserId: buyerUserId,
                 title: 'Second-chance offer',
-                message: `${listing.correctionOf ? 'Listing details were corrected after the previous transaction. ' : ''}Review the local offer for ${listing.title} and its current disclosures before accepting.`,
+                message: `${listing.correctionOf ? 'Listing details were corrected after the previous transaction. ' : ''}Review the local offer for ${listing.title}, based on the recipient's last visible bid, and its current disclosures before accepting.`,
                 listingId: submission.listingId
             });
             return { ok: true, data: listingStates.get(submission.listingId) };

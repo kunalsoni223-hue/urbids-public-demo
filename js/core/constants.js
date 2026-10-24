@@ -1,4 +1,5 @@
 export const STORAGE_KEYS = Object.freeze({
+    schemaVersion: 'urbids-demo-schema-version',
     bids: 'urbids-demo-bids',
     autoBids: 'urbids-demo-auto-bids',
     watchlist: 'urbids-demo-watchlist',
@@ -12,6 +13,8 @@ export const STORAGE_KEYS = Object.freeze({
     feedback: 'urbids-demo-feedback',
     userProfiles: 'urbids-demo-user-profiles'
 });
+
+export const PROTOTYPE_STORAGE_SCHEMA_VERSION = 1;
 
 export const LISTING_FORMAT = Object.freeze({
     auction: 'auction',
@@ -97,6 +100,7 @@ export const USABILITY_EVENT_TYPE = Object.freeze({
     filterUsed: 'filter_used',
     listingOpened: 'listing_opened',
     watchlistAdded: 'watchlist_added',
+    watchlistRemoved: 'watchlist_removed',
     bidAttempted: 'bid_attempted',
     bidAccepted: 'bid_accepted',
     bidRejected: 'bid_rejected',

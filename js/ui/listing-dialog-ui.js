@@ -4,6 +4,7 @@ import { getTransactionTimeline, transactionStatusLabel } from '../services/tran
 import { listingPlaceholderLabel } from '../services/listing-service.js';
 import { normalizeSpecifications } from '../core/normalization.js';
 import { renderTransactionTimeline } from './transaction-timeline-ui.js';
+import { announceGlobalStatus } from './status-announcer.js';
 
 export function createListingDialogUI({ documentRef = document, state, biddingService, activityService, auctionManagement, watchlistService, dialogController, renderListings, recordEvent = () => {} }) {
     const { listingStates, transactionStore, userService } = state;
@@ -21,6 +22,8 @@ export function createListingDialogUI({ documentRef = document, state, biddingSe
     const autoBidDisable = documentRef.getElementById('auto-bid-disable');
     const detailWatchButton = documentRef.getElementById('product-details-watch');
     const image = documentRef.getElementById('product-details-image');
+    image.width = 800;
+    image.height = 720;
     const placeholder = documentRef.getElementById('product-details-placeholder');
     const thumbnailContainer = documentRef.getElementById('product-details-thumbnails');
     const reportIssueButton = documentRef.getElementById('product-details-report-issue');
@@ -102,6 +105,8 @@ export function createListingDialogUI({ documentRef = document, state, biddingSe
             const thumbnail = documentRef.createElement('img');
             thumbnail.src = imageUrl;
             thumbnail.loading = 'lazy';
+            thumbnail.width = 120;
+            thumbnail.height = 120;
             thumbnail.alt = listing.imageAlt;
             button.append(thumbnail);
             return button;
@@ -189,7 +194,7 @@ export function createListingDialogUI({ documentRef = document, state, biddingSe
                 : remainingTime;
         const latestDispute = disputeService.getLatestForListing(listingId);
         documentRef.getElementById('product-details-auction-status').textContent = listing.secondChanceOffer
-            ? `Second-chance offer ${auctionManagement.offerStatus(listing)} · ${formatCurrency(listing.secondChanceOffer.price)} · Expires ${new Date(listing.secondChanceOffer.expiresAt).toLocaleString()}`
+            ? `Second-chance offer ${auctionManagement.offerStatus(listing)} · ${formatCurrency(listing.secondChanceOffer.price)} based on the recipient's last visible bid · Expires ${new Date(listing.secondChanceOffer.expiresAt).toLocaleString()}`
             : listing.listingFormat === LISTING_FORMAT.buyNow && transaction.status === TRANSACTION_STATUS.auctionActive
             ? 'Available at fixed price'
             : transactionStore.isPaused(listingId)
@@ -231,7 +236,7 @@ export function createListingDialogUI({ documentRef = document, state, biddingSe
         const watchlist = userService.getWatchlist();
         detailWatchButton.textContent = watchlist.has(listingId) ? 'Saved' : 'Save';
         detailWatchButton.setAttribute('aria-pressed', String(watchlist.has(listingId)));
-        detailWatchButton.setAttribute('aria-label', watchlist.has(listingId) ? 'Remove from watchlist' : 'Add to watchlist');
+        detailWatchButton.setAttribute('aria-label', watchlist.has(listingId) ? 'Saved, remove from Watchlist' : 'Save to Watchlist');
 
         const buyNowButton = documentRef.getElementById('product-details-buy-now-button');
         buyNowButton.hidden = !biddingService.isBuyNowAvailable(listingId);
@@ -355,8 +360,8 @@ export function createListingDialogUI({ documentRef = document, state, biddingSe
         if (!leading) recordEvent(USABILITY_EVENT_TYPE.immediatelyOutbid, { relatedId: activeBidListingId });
         renderListings();
         const bidSuccess = documentRef.getElementById('bid-success');
-        bidSuccess.textContent = leading ? 'Bid accepted. You\u2019re leading.'
-            : 'Bid accepted. You were immediately outbid by another buyer\u2019s automatic bid.';
+        bidSuccess.textContent = `${leading ? 'Bid accepted. You\u2019re leading.'
+            : 'Bid accepted. You were immediately outbid by another buyer\u2019s automatic bid.'}${result.data.auctionExtended ? ' Auction extended by two minutes.' : ''}`;
         bidSuccess.hidden = false;
     }
 
@@ -372,6 +377,7 @@ export function createListingDialogUI({ documentRef = document, state, biddingSe
         if (!result.data.leading) recordEvent(USABILITY_EVENT_TYPE.immediatelyOutbid, { relatedId: activeBidListingId });
         renderListings();
         prepareBidDialog(activeBidListingId);
+        if (result.data.auctionExtended) autoBidStatus.textContent += '\nAuction extended by two minutes.';
         autoBidExpand.focus();
     }
 
@@ -478,12 +484,13 @@ export function createListingDialogUI({ documentRef = document, state, biddingSe
             else watchlist.delete(activeDetailsListingId);
         }
         const isWatching = watchlist.has(activeDetailsListingId);
-        if (saved && !wasWatching && isWatching) {
-            recordEvent(USABILITY_EVENT_TYPE.watchlistAdded, { relatedId: activeDetailsListingId });
+        if (saved && wasWatching !== isWatching) {
+            recordEvent(isWatching ? USABILITY_EVENT_TYPE.watchlistAdded : USABILITY_EVENT_TYPE.watchlistRemoved, { relatedId: activeDetailsListingId });
+            announceGlobalStatus(isWatching ? 'Added to Watchlist.' : 'Removed from Watchlist.', documentRef, { allowDialog: true });
         }
         detailWatchButton.textContent = isWatching ? 'Saved' : 'Save';
         detailWatchButton.setAttribute('aria-pressed', String(isWatching));
-        detailWatchButton.setAttribute('aria-label', isWatching ? 'Remove from watchlist' : 'Add to watchlist');
+        detailWatchButton.setAttribute('aria-label', isWatching ? 'Saved, remove from Watchlist' : 'Save to Watchlist');
         renderListings();
     });
     detailsDialog.addEventListener('close', () => {

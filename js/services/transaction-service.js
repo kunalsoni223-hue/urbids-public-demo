@@ -207,11 +207,15 @@ function canPerformTransaction({ transaction, listing, event, details, userId, i
     if (event === TRANSACTION_EVENT.auctionEnd) {
         const highestBid = getHighestValidBid(transaction.bidHistory);
         if (details.sellerUserId !== listing.sellerUserId) return false;
+        const buyNowReached = details.buyNowReached === true
+            && Number.isSafeInteger(listing.buyNowPrice)
+            && highestBid?.amount === listing.buyNowPrice;
+        if (details.buyNowReached === true && !buyNowReached) return false;
         const hasReserve = listing.reservePriceMode === RESERVE_PRICE_MODE.set
             && Number.isSafeInteger(listing.reservePrice)
             && listing.reservePrice > 0;
-        const reserveMet = highestBid && (!hasReserve || highestBid.amount >= listing.reservePrice);
-        const expectedOutcome = hasReserve && highestBid
+        const reserveMet = buyNowReached || highestBid && (!hasReserve || highestBid.amount >= listing.reservePrice);
+        const expectedOutcome = !buyNowReached && hasReserve && highestBid
             ? reserveMet ? AUCTION_RESERVE_OUTCOME.met : AUCTION_RESERVE_OUTCOME.notMet
             : null;
         if (details.reserveOutcome !== expectedOutcome
@@ -886,7 +890,7 @@ export function createTransactionStore({
                 };
             } else if (event === TRANSACTION_EVENT.auctionEnd) {
                 const highestBid = getHighestValidBid(current.bidHistory);
-                const reserveNotMet = details.reserveOutcome === AUCTION_RESERVE_OUTCOME.notMet;
+                const reserveNotMet = !details.buyNowReached && details.reserveOutcome === AUCTION_RESERVE_OUTCOME.notMet;
                 const buyerUserId = highestBid && !reserveNotMet ? details.buyerUserId : null;
                 next = {
                     ...current,

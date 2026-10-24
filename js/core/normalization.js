@@ -33,6 +33,10 @@ export function normalizeTimestamp(value) {
     return typeof value === 'string' && Number.isFinite(Date.parse(value)) ? value : null;
 }
 
+export function normalizeStorageSchemaVersion(value) {
+    return Number.isSafeInteger(value) && value >= 0 ? value : 0;
+}
+
 export function uniqueRecords(records) {
     const seen = new Set();
     return records.filter(record => {

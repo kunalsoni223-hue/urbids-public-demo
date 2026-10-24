@@ -10,7 +10,7 @@ export function createNotificationUI({ documentRef = document, notificationServi
         const unreadCount = notificationService.getUnreadCount(userId);
         count.textContent = String(unreadCount);
         count.hidden = unreadCount === 0;
-        trigger.setAttribute('aria-label', unreadCount ? `Notifications, ${unreadCount} unread` : 'Notifications');
+        trigger.setAttribute('aria-label', unreadCount ? `Alerts, ${unreadCount} unread` : 'Alerts');
         empty.hidden = notifications.length > 0;
         documentRef.getElementById('mark-notifications-read').disabled = unreadCount === 0;
         list.replaceChildren(...notifications.map(notification => {

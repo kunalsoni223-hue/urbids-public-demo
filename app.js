@@ -1,5 +1,5 @@
 import { config } from './js/config.js';
-import { setStorageProblemHandler } from './js/core/storage.js';
+import { initializePrototypeStorageSchema, setStorageProblemHandler, subscribeToStorageChanges } from './js/core/storage.js';
 import { loadListingStates } from './js/services/listing-service.js';
 import { createBiddingService, getHighestValidBid, restoreBids } from './js/services/bidding-service.js';
 import { createTransactionStore } from './js/services/transaction-service.js';
@@ -25,6 +25,7 @@ import { createPublicFeedbackUI } from './js/ui/public-feedback-ui.js';
 import { createAuctionManagementService } from './js/services/auction-management-service.js';
 import { createWatchlistService } from './js/services/watchlist-service.js';
 import { createAuctionManagementUI } from './js/ui/auction-management-ui.js';
+import { announceGlobalStatus } from './js/ui/status-announcer.js';
 
 const documentRef = document;
 setStorageProblemHandler(() => {
@@ -33,10 +34,17 @@ setStorageProblemHandler(() => {
     status.hidden = false;
     status.textContent = 'Some saved data could not be read or saved. Changes may not survive a refresh. Check browser storage permissions before continuing.';
 });
+initializePrototypeStorageSchema();
+subscribeToStorageChanges(() => {
+    const status = documentRef.getElementById('storage-status');
+    if (!status) return;
+    status.hidden = false;
+    status.textContent = 'Urbids changed in another tab. Refresh to see the latest prototype state.';
+});
 documentRef.getElementById('brand-name').textContent = config.brandName;
 documentRef.getElementById('hero-tagline').textContent = config.tagline;
 documentRef.getElementById('pilot-city').textContent = config.pilotCity;
-documentRef.title = `${config.brandName} | Quality pre-owned marketplace`;
+documentRef.title = `${config.brandName} | Your marketplace for pre-owned goods`;
 
 const dialogController = createDialogController(documentRef);
 const sellerPhotoManager = createSellerPhotoManager({ documentRef });
@@ -58,6 +66,7 @@ disputeService = createDisputeService({ listingStates, transactionStore, userSer
 const ratingService = createRatingService({ listingStates, transactionStore, userService, notificationService });
 const state = createAppState(listingStates, transactionStore, userService, disputeService, ratingService);
 const biddingService = createBiddingService(listingStates, transactionStore, userService, undefined, notificationService, initialBidState, auctionExtensionCounts);
+biddingService.closeAuctionsAtBuyNow();
 const auctionManagement = createAuctionManagementService({ listingStates, transactionStore, biddingService, userService, notificationService, photoManager: sellerPhotoManager });
 const watchlistService = createWatchlistService({ listingStates, userService, transactionStore, notificationService, auctionManagement });
 const activityService = createActivityService({ listingStates, transactionStore, userService, disputeService, ratingService, biddingService, auctionManagement, watchlistService, notificationService });

@@ -14,7 +14,6 @@ export const config = {
         sellerDurationOptionsHours: AUCTION_DURATION_OPTIONS_HOURS,
         lateBidWindowMs: 2 * 60 * 1000,
         lateBidExtensionMs: 2 * 60 * 1000,
-        maximumLateBidExtensions: 3,
         maximumListingPrice: 10000000
     },
     sellerBidIncrements: [1, 10, 100, 1000],

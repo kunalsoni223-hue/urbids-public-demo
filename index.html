@@ -4,8 +4,17 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
 
-    <meta name="description" content="Buy and sell quality pre-owned products through auctions or Buy Now. Compare clear listing details, reputation and flexible handover options in this browser-local research prototype.">
-    <title>Urbids | Quality pre-owned marketplace</title>
+    <meta name="description" content="Discover products worth owning again. Urbids is a browser-local research prototype exploring a marketplace for pre-owned goods; listings, accounts and transactions are fictional simulations.">
+    <link rel="canonical" href="https://kunalsoni223-hue.github.io/urbids-public-demo/">
+    <link rel="icon" type="image/svg+xml" href="favicon.svg">
+    <meta property="og:title" content="Urbids | Your marketplace for pre-owned goods">
+    <meta property="og:description" content="Discover products worth owning again. A browser-local research prototype with fictional listings and simulated activity.">
+    <meta property="og:type" content="website">
+    <meta property="og:url" content="https://kunalsoni223-hue.github.io/urbids-public-demo/">
+    <meta name="twitter:card" content="summary">
+    <meta name="twitter:title" content="Urbids | Your marketplace for pre-owned goods">
+    <meta name="twitter:description" content="Discover products worth owning again. A browser-local research prototype with fictional listings and simulated activity.">
+    <title>Urbids | Your marketplace for pre-owned goods</title>
     <link rel="stylesheet" href="css/tokens.css">
     <link rel="stylesheet" href="css/base.css">
     <link rel="stylesheet" href="css/components.css">
@@ -20,15 +29,15 @@
                 <label class="visually-hidden" for="listing-search-input">Search products</label>
                 <input id="listing-search-input" type="search" placeholder="Search premium pre-owned finds">
             </div>
-            <button class="header-icon-button mobile-search-toggle" id="mobile-search-toggle" type="button" aria-label="Open search" aria-expanded="false" aria-controls="header-search">Search</button>
-            <button class="header-icon-button mobile-watchlist-toggle" id="mobile-watchlist-toggle" type="button" aria-label="Show watched items" aria-pressed="false">Saved</button>
-            <button class="header-icon-button notification-center-button" id="notification-center-button" type="button" aria-label="Notifications">Alerts <span class="notification-unread-count" id="notification-unread-count" hidden></span></button>
-            <nav class="navigation-links" aria-label="Main navigation">
+            <button class="header-icon-button mobile-search-toggle" id="mobile-search-toggle" type="button" aria-label="Search, open" aria-expanded="false" aria-controls="header-search">Search</button>
+            <button class="header-icon-button mobile-watchlist-toggle" id="mobile-watchlist-toggle" type="button" aria-label="Saved, show Watchlist" aria-pressed="false">Saved</button>
+            <button class="header-icon-button notification-center-button" id="notification-center-button" type="button" aria-label="Alerts">Alerts <span class="notification-unread-count" id="notification-unread-count" hidden></span></button>
+            <nav class="navigation-links" aria-label="Sell, Help, Watchlist and profile">
                 <a href="#sell">Sell</a>
                 <a href="#public-help">Help</a>
                 <button id="header-watchlist-toggle" type="button" aria-pressed="false">Watchlist</button>
                 <details class="profile-control" id="profile-control">
-                    <summary id="profile-control-toggle" aria-label="Open your profile">
+                    <summary id="profile-control-toggle" aria-label="KS, Kunal's profile menu">
                         <span class="profile-avatar" id="profile-avatar">KS</span>
                         <span class="profile-control-copy"><strong id="profile-name">Kunal</strong><small id="profile-reputation">4.9 ★ · 24 completed</small></span>
                     </summary>
@@ -44,8 +53,8 @@
                 </details>
             </nav>
             <details class="mobile-menu">
-                <summary id="mobile-menu-toggle" aria-label="Open menu">Menu</summary>
-                <nav aria-label="Mobile navigation">
+                <summary id="mobile-menu-toggle">Menu</summary>
+                <nav aria-label="Sell an item, Help and safety, My Activity, Profile and reviews, Account details">
                     <a href="#sell">Sell an item</a>
                     <a href="#public-help">Help &amp; safety</a>
                     
@@ -77,7 +86,6 @@
                     <a class="secondary-button" href="#sell">Sell an item</a>
                 </div>
                 <p class="hero-trust">Research prototype. Fictional listings; no real transactions.</p>
-                <p class="hero-trust">Activity stays in this browser; testers are not connected to each other.</p>
             </div>
         </section>
 
@@ -85,6 +93,7 @@
 
         
         <p class="container bid-error" id="storage-status" role="alert" hidden></p>
+        <p class="visually-hidden" id="global-status" role="status" aria-live="polite" aria-atomic="true"></p>
 
         
 
@@ -95,7 +104,7 @@
                         <p class="eyebrow">CURATED IN MUMBAI</p>
                         <h2 class="section-title">Discover your next find</h2>
                     </div>
-                    <p class="listings-count"><span id="filtered-listing-count" aria-live="polite">0</span> finds <span aria-hidden="true">·</span> <span id="public-listing-count">0</span> total</p>
+                    <p class="listings-count"><span id="filtered-listing-count">0</span> finds <span aria-hidden="true">·</span> <span id="public-listing-count">0</span> total</p>
                 </div>
                 <p class="listing-image-note bid-minimum">Listing images are illustrative sample photos and may not show the exact item or model.</p>
                 <div class="discovery-tabs" role="group" aria-label="Discover listings">
@@ -692,7 +701,7 @@
                     <label for="seller-photos">Product photos</label>
                     <input id="seller-photos" name="photos" type="file" accept="image/*" multiple aria-describedby="seller-photo-note seller-listing-error">
                     <p class="bid-minimum" id="seller-photo-note">Add clear photos showing the product, condition and relevant details. Photos stay in this browser and are not uploaded.</p>
-                    <div class="seller-photo-previews" id="seller-photo-previews" aria-live="polite"></div>
+                    <div class="seller-photo-previews" id="seller-photo-previews"></div>
 
                     <label for="seller-location">City / area only</label>
                     <input id="seller-location" name="location" type="text" aria-describedby="seller-listing-error" required>
@@ -860,7 +869,7 @@
                 </ul>
             </article>
             <article class="public-faq" id="public-faq" data-public-title="Frequently asked questions" hidden>
-                <details><summary>How does bidding work?</summary><p>Place the displayed next bid. The highest eligible accepted bid at auction close wins. A valid late bid can extend the auction by two minutes, up to three times.</p></details>
+                <details><summary>How does bidding work?</summary><p>Place the displayed next bid. The highest eligible accepted bid at auction close wins. A valid bid in the final two minutes extends the auction by two minutes; further valid bids in each renewed final two-minute window extend it again.</p></details>
                 <details><summary>Who chooses the bid increment?</summary><p>The seller chooses the auction's increment. Each next bid adds that fixed amount; buyers do not choose a custom manual amount.</p></details>
                 <details><summary>How does automatic bidding work?</summary><p>Set a private maximum and Urbids bids only when needed, using the seller's increment and never exceeding your limit. You can increase it later. Equal eligible maxima favour the earlier maximum. Other buyers and the seller do not see your limit. It is saved in this browser, not in a secure online account.</p></details>
                 <details><summary>What happens if I win?</summary><p>Confirm within six hours, review any simulated reservation deposit and choose an available handover option. This prototype does not arrange a real sale.</p></details>
@@ -868,8 +877,8 @@
                 <details><summary>Is a meetup mandatory?</summary><p>No. Available handover options depend on the listing and item. Eligible items may use simple collection; public meet-and-inspect is available when appropriate. Shipping is only a research simulation.</p></details>
                 <details><summary>When should I inspect?</summary><p>It depends on the item and its risks. Phones and laptops may benefit from technical checks; furniture from a condition and dimensions check; appliances from an operating check; and fashion from a condition check. Books and collectibles may need only a simple condition check. Follow the listing's guidance; inspection is not authentication or a guarantee.</p></details>
                 <details><summary>What if the item differs from its listing?</summary><p>Use the transaction's issue option to report a material mismatch before confirming completion. A wrong model or undisclosed fault differs from a change of mind. Issue handling and any refund shown here are simulations, not a promise of recovery.</p></details>
-                <details><summary>What are second-chance offers?</summary><p>After an eligible failed sale, a seller may offer the item to a previous bidder at that bidder's own accepted price. Offers are made one at a time and expire after 12 hours. They are simulated here.</p></details>
-                <details><summary>Is this a real marketplace yet?</summary><p>No. This is a browser-local research prototype with fictional listings and profiles. Public access does not create real accounts, payments, deliveries or transactions.</p></details>
+                <details><summary>What are second-chance offers?</summary><p>After an eligible failed sale, a seller may offer the item to a previous bidder at that bidder's last visible accepted bid. Offers are made one at a time and expire after 12 hours. They are simulated here.</p></details>
+                <details><summary>Is this a real marketplace yet?</summary><p>No. Each visitor uses an independent browser-local simulation. Bids, listings and activity are not shared with other visitors. Clearing browser data removes prototype activity. No real payments occur and no real accounts are created; browser-local activity should not contain sensitive information.</p></details>
             </article>
             <article id="public-privacy" data-public-title="Prototype privacy notice" hidden>
                 <p>Prototype records are saved in this browser. There are no real accounts, and other browsers or devices do not share your activity.</p>

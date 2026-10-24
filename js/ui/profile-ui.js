@@ -20,7 +20,7 @@ export function createProfileUI({ documentRef = document, userService, ratingSer
         documentRef.getElementById('profile-name').textContent = user.firstName;
         documentRef.getElementById('profile-reputation').textContent = `★ ${reputation.sellerRating.toFixed(1)} · ${reputation.completedTransactions} completed`;
         documentRef.getElementById('profile-user-summary').textContent = user.location;
-        profileToggle.setAttribute('aria-label', `Open ${user.firstName}'s profile`);
+        profileToggle.setAttribute('aria-label', `${user.initials}, ${user.firstName}'s profile menu`);
         documentRef.getElementById('mobile-profile-name').textContent = user.firstName;
     }
 

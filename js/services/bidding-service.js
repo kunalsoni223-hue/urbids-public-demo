@@ -46,7 +46,6 @@ export function restoreBids(listingStates) {
         listing.bidCount = savedListing.bidCount;
         const extensionCount = Number.isSafeInteger(savedListing.extensionCount)
             && savedListing.extensionCount >= 0
-            && savedListing.extensionCount <= config.auctionRules.maximumLateBidExtensions
             ? savedListing.extensionCount
             : 0;
         const savedEnd = Date.parse(savedListing.auctionEndsAt);
@@ -92,15 +91,23 @@ export function createBiddingService(listingStates, transactionStore, userServic
     }
 
     function minimumNextBid(listing) {
-        return listing.currentBid + normalizeBidIncrement(listing.bidIncrement, listing.currentBid);
+        return bidRulesForListing(listing).minimumBid;
+    }
+
+    function bidRulesForListing(listing) {
+        const increment = normalizeBidIncrement(listing.bidIncrement, listing.currentBid);
+        const hasBuyNow = Number.isSafeInteger(listing.buyNowPrice);
+        const maximumBid = hasBuyNow
+            ? Math.min(bidCeiling, listing.buyNowPrice) : bidCeiling;
+        const minimumBid = Math.min(listing.currentBid + increment, maximumBid);
+        return { increment, minimumBid, maximumBid,
+            maximumStep: hasBuyNow ? maximumBid
+                : listing.currentBid + Math.floor((maximumBid - listing.currentBid) / increment) * increment };
     }
 
     function bidRules(listingId) {
         const listing = listingStates.get(listingId);
-        if (!listing) return null;
-        const increment = normalizeBidIncrement(listing.bidIncrement, listing.currentBid);
-        return { increment, minimumBid: listing.currentBid + increment, maximumBid: bidCeiling,
-            maximumStep: listing.currentBid + Math.floor((bidCeiling - listing.currentBid) / increment) * increment };
+        return listing ? bidRulesForListing(listing) : null;
     }
 
     const autoBids = loadAutoBids();
@@ -132,7 +139,7 @@ export function createBiddingService(listingStates, transactionStore, userServic
             .reduce((best, bid) => Math.max(best, bid.amount), 0);
     }
 
-    function commitBid(listingId, bidder, amount, { automatic = false, tiePriority = false, allowExtension = true } = {}) {
+    function commitBid(listingId, bidder, amount, { automatic = false, tiePriority = false } = {}) {
         const listing = listingStates.get(listingId);
         const previousBid = listing.currentBid;
         const previousBidCount = listing.bidCount;
@@ -140,10 +147,11 @@ export function createBiddingService(listingStates, transactionStore, userServic
         const previousAuctionEndsAt = listing.auctionEndsAt;
         const previousExtensionCount = auctionExtensionCounts.get(listingId) || 0;
         const auctionEnd = Date.parse(listing.auctionEndsAt);
-        const lateBidExtended = allowExtension
+        const buyNowReached = Number.isSafeInteger(listing.buyNowPrice) && amount >= listing.buyNowPrice;
+        const lateBidExtended = !buyNowReached
             && Number.isFinite(auctionEnd)
             && auctionEnd - now() <= config.auctionRules.lateBidWindowMs
-            && previousExtensionCount < config.auctionRules.maximumLateBidExtensions;
+            ;
         const placedAt = new Date(nextStamp(listingId)).toISOString();
         const restore = () => {
             listing.currentBid = previousBid;
@@ -182,7 +190,7 @@ export function createBiddingService(listingStates, transactionStore, userServic
     }
 
     // Resolves private maxima into the minimal set of resulting public bids.
-    function settleAutoBids(listingId, allowExtension) {
+    function settleAutoBids(listingId) {
         const placed = [];
         const listing = listingStates.get(listingId);
         if (!listing || !isBiddingOpen(listingId)) return placed;
@@ -197,7 +205,7 @@ export function createBiddingService(listingStates, transactionStore, userServic
             const best = bestBids.get(bid.bidderUserId);
             if (!best || bid.amount > best.amount) bestBids.set(bid.bidderUserId, { amount: bid.amount, at: Date.parse(bid.placedAt) || 0 });
         });
-        const { increment } = bidRules(listingId);
+        const { increment, maximumBid } = bidRules(listingId);
         const steps = planProxyBids({
             currentBid: listing.currentBid,
             leaderUserId: leaderOf(listingId),
@@ -205,21 +213,24 @@ export function createBiddingService(listingStates, transactionStore, userServic
             proxies: proxies.map(entry => ({
                 ...entry,
                 // Round only the resolution limit, never the stored private maximum.
-                maxAmount: listing.currentBid + Math.floor((entry.maxAmount - listing.currentBid) / increment) * increment
+                maxAmount: Number.isSafeInteger(listing.buyNowPrice) && entry.maxAmount >= maximumBid
+                    ? maximumBid
+                    : Math.min(maximumBid, listing.currentBid + Math.floor((entry.maxAmount - listing.currentBid) / increment) * increment)
             })),
-            minimumNextBid: currentBid => currentBid + increment
+            minimumNextBid: currentBid => Math.min(currentBid + increment, maximumBid)
         });
-        let canExtend = allowExtension;
         for (const step of steps) {
-            if (step.amount > bidCeiling) break;
+            if (step.amount > maximumBid) break;
             const result = commitBid(listingId, getDemoUser(step.userId), step.amount, {
                 automatic: true,
-                tiePriority: step.tiePriority === true,
-                allowExtension: canExtend
+                tiePriority: step.tiePriority === true
             });
             if (!result.ok) break;
-            if (result.lateBidExtended) canExtend = false;
             placed.push({ ...step, extended: result.lateBidExtended });
+            if (Number.isSafeInteger(listing.buyNowPrice) && listing.currentBid >= listing.buyNowPrice) {
+                closeAuction(listingId, { buyNowReached: true });
+                break;
+            }
         }
         return placed;
     }
@@ -282,6 +293,54 @@ export function createBiddingService(listingStates, transactionStore, userServic
         };
     }
 
+    function closeAuction(listingId, { buyNowReached = false } = {}) {
+        const listing = listingStates.get(listingId);
+        if (!listing || listing.secondChanceOffer || transactionStore.get(listingId).status !== TRANSACTION_STATUS.auctionActive) return null;
+        const highestBid = getHighestValidBid(transactionStore.get(listingId).bidHistory);
+        const reachedBuyNow = buyNowReached && Number.isSafeInteger(listing.buyNowPrice)
+            && highestBid?.amount === listing.buyNowPrice;
+        const hasReserve = !reachedBuyNow && listing.reservePriceMode === RESERVE_PRICE_MODE.set
+            && Number.isSafeInteger(listing.reservePrice)
+            && listing.reservePrice > 0;
+        const reserveMet = reachedBuyNow || highestBid && (!hasReserve || highestBid.amount >= listing.reservePrice);
+        const winner = reserveMet ? resolveWinner(listingId) : null;
+        return transactionStore.transition(listingId, TRANSACTION_EVENT.auctionEnd, {
+            buyNowReached: reachedBuyNow,
+            ...(winner || {
+                buyerUserId: null,
+                winner: null,
+                winningBid: null,
+                sellerUserId: listing.sellerUserId
+            }),
+            reserveOutcome: !reachedBuyNow && hasReserve && highestBid
+                ? reserveMet ? AUCTION_RESERVE_OUTCOME.met : AUCTION_RESERVE_OUTCOME.notMet
+                : null
+        });
+    }
+
+    function closeAuctionsAtBuyNow() {
+        const closed = [];
+        listingStates.forEach((listing, listingId) => {
+            if (!Number.isSafeInteger(listing.buyNowPrice) || listing.listingFormat === LISTING_FORMAT.buyNow) return;
+            const transaction = transactionStore.get(listingId);
+            const highestBid = getHighestValidBid(transaction.bidHistory);
+            if (listing.currentBid > listing.buyNowPrice || highestBid?.amount > listing.buyNowPrice) {
+                listing.buyNowPrice = null;
+                if (listing.listingFormat === LISTING_FORMAT.auctionAndBuyNow) listing.listingFormat = LISTING_FORMAT.auction;
+                return;
+            }
+            if (listing.currentBid === listing.buyNowPrice && highestBid?.amount === listing.buyNowPrice
+                && transaction.status === TRANSACTION_STATUS.auctionActive) {
+                const result = closeAuction(listingId, { buyNowReached: true });
+                if (result) closed.push({ listing, transaction: result });
+            } else if (listing.currentBid >= listing.buyNowPrice) {
+                listing.buyNowPrice = null;
+                if (listing.listingFormat === LISTING_FORMAT.auctionAndBuyNow) listing.listingFormat = LISTING_FORMAT.auction;
+            }
+        });
+        return closed;
+    }
+
     return {
         minimumNextBid,
         getBidRules: bidRules,
@@ -324,11 +383,13 @@ export function createBiddingService(listingStates, transactionStore, userServic
             const endTime = listing ? Date.parse(listing.auctionEndsAt) : NaN;
             return Number.isFinite(endTime) && endTime <= now();
         },
+        closeAuctionsAtBuyNow,
         canBid(listingId) {
             const listing = listingStates.get(listingId);
             return Boolean(listing
                 && !listing.secondChanceOffer
                 && listing.listingFormat !== LISTING_FORMAT.buyNow
+                && (!Number.isSafeInteger(listing.buyNowPrice) || listing.currentBid < listing.buyNowPrice)
                 && minimumNextBid(listing) <= bidCeiling
                 && !this.isAuctionExpired(listingId)
                 && !isCurrentUserListingOwner(listingId)
@@ -366,7 +427,9 @@ export function createBiddingService(listingStates, transactionStore, userServic
             const currentUser = userService.getCurrentUser();
             const committed = commitBid(listingId, currentUser, amount);
             if (!committed.ok) return { ok: false, code: SERVICE_ERROR_CODE.storageFailed, minimumBid };
-            const placed = settleAutoBids(listingId, !committed.lateBidExtended);
+            const reachedBuyNow = Number.isSafeInteger(listing.buyNowPrice) && listing.currentBid >= listing.buyNowPrice;
+            if (reachedBuyNow) closeAuction(listingId, { buyNowReached: true });
+            const placed = reachedBuyNow ? [] : settleAutoBids(listingId);
             notifyAutoBidOutcomes(listingId, { actorUserId: currentUser.id, previousLeaderId, placed });
             const leading = leaderOf(listingId) === currentUser.id;
             notificationService?.notifyBidResult({ listing, recipientUserId: currentUser.id,
@@ -453,11 +516,16 @@ export function createBiddingService(listingStates, transactionStore, userServic
                 return { ok: false, code: SERVICE_ERROR_CODE.storageFailed };
             }
             const previousLeaderId = leaderOf(listingId);
-            const placed = settleAutoBids(listingId, true);
+            const placed = settleAutoBids(listingId);
             notifyAutoBidOutcomes(listingId, { actorUserId: user.id, previousLeaderId, placed });
             return {
                 ok: true,
-                data: { leading: leaderOf(listingId) === user.id, currentBid: listing.currentBid, bidsPlaced: placed.length }
+                data: {
+                    leading: leaderOf(listingId) === user.id,
+                    currentBid: listing.currentBid,
+                    bidsPlaced: placed.length,
+                    auctionExtended: placed.some(step => step.extended)
+                }
             };
         },
         disableAutoBid(listingId) {
@@ -473,25 +541,7 @@ export function createBiddingService(listingStates, transactionStore, userServic
             return { ok: true };
         },
         endAuction(listingId) {
-            const listing = listingStates.get(listingId);
-            if (!listing || listing.secondChanceOffer || transactionStore.get(listingId).status !== TRANSACTION_STATUS.auctionActive) return null;
-            const highestBid = getHighestValidBid(transactionStore.get(listingId).bidHistory);
-            const hasReserve = listing.reservePriceMode === RESERVE_PRICE_MODE.set
-                && Number.isSafeInteger(listing.reservePrice)
-                && listing.reservePrice > 0;
-            const reserveMet = highestBid && (!hasReserve || highestBid.amount >= listing.reservePrice);
-            const winner = reserveMet ? resolveWinner(listingId) : null;
-            return transactionStore.transition(listingId, TRANSACTION_EVENT.auctionEnd, {
-                ...(winner || {
-                buyerUserId: null,
-                winner: null,
-                winningBid: null,
-                sellerUserId: listing.sellerUserId
-                }),
-                reserveOutcome: hasReserve && highestBid
-                    ? reserveMet ? AUCTION_RESERVE_OUTCOME.met : AUCTION_RESERVE_OUTCOME.notMet
-                    : null
-            });
+            return closeAuction(listingId);
         },
         closeExpiredAuctions() {
             const closed = [];

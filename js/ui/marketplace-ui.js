@@ -2,6 +2,7 @@ import { CATEGORY, CATEGORY_NAV_LABELS, CONDITION_GRADE_LABELS, DISPUTE_RESOLUTI
 import { formatCurrency, formatTimeRemaining } from '../core/formatting.js';
 import { transactionStatusLabel } from '../services/transaction-service.js';
 import { getDiscoveryListings, listingPlaceholderLabel } from '../services/listing-service.js';
+import { announceGlobalStatus } from './status-announcer.js';
 
 const listingSearchAliases = new Map([
     ['laptop', /\b(macbook|thinkpad)\b/],
@@ -112,6 +113,7 @@ export function createMarketplaceUI({ documentRef = document, state, biddingServ
     const listingCity = documentRef.getElementById('pilot-city')?.textContent.trim().toLowerCase() || '';
     const { listingStates, transactionStore, userService, disputeService } = state;
     let activeCategory = FILTER_ALL;
+    const announcedDeadlineThresholds = new Set();
     let activeSearchTerm = '';
     let activeCondition = FILTER_ALL;
     let activeMaximumBid = null;
@@ -220,9 +222,14 @@ export function createMarketplaceUI({ documentRef = document, state, biddingServ
             countdown.classList.toggle('is-ended', countdown.dataset.auctionClosed === 'true' || (isValid && remaining <= 0));
             countdown.classList.toggle('is-urgent', countdown.dataset.auctionClosed !== 'true' && isValid && remaining > 0 && remaining < 10 * 60 * 1000);
             countdown.classList.toggle('is-unavailable', !isValid);
-            countdown.setAttribute('aria-label', !isValid
-                ? 'Auction end time unavailable'
-                : remaining <= 0 ? 'Auction ended' : `Ends in ${countdown.textContent}`);
+            const card = countdown.closest('.listing-card');
+            const listingId = card?.dataset.listingId;
+            const thresholdKey = `${listingId}:${countdown.dataset.auctionEnds}:two-minutes`;
+            if (isValid && remaining > 0 && remaining <= 2 * 60 * 1000
+                && card?.matches(':focus-within') && !announcedDeadlineThresholds.has(thresholdKey)) {
+                announcedDeadlineThresholds.add(thresholdKey);
+                announceGlobalStatus('An auction you are viewing has two minutes remaining.', documentRef);
+            }
         });
     }
 
@@ -259,7 +266,7 @@ export function createMarketplaceUI({ documentRef = document, state, biddingServ
         focusTarget?.focus({ preventScroll: true });
     }
 
-    function createListingCard(listing) {
+    function createListingCard(listing, prioritizeImage = false) {
         const watchlist = userService.getWatchlist();
         const card = documentRef.createElement('article');
         card.className = 'listing-card';
@@ -281,7 +288,10 @@ export function createMarketplaceUI({ documentRef = document, state, biddingServ
             image = documentRef.createElement('img');
             image.className = 'listing-image';
             image.src = cardImages[0];
-            image.loading = 'lazy';
+            image.width = 800;
+            image.height = 600;
+            image.loading = prioritizeImage ? 'eager' : 'lazy';
+            if (prioritizeImage) image.setAttribute('fetchpriority', 'high');
             image.decoding = 'async';
             image.alt = listing.imageAlt;
             const imageFallback = documentRef.createElement('div');
@@ -334,7 +344,7 @@ export function createMarketplaceUI({ documentRef = document, state, biddingServ
         media.append(conditionBadge);
 
         const watchButton = createButton(documentRef, watchlist.has(listing.id) ? 'Saved' : 'Save', 'watch-button card-watch-button', 'watch');
-        watchButton.setAttribute('aria-label', watchlist.has(listing.id) ? 'Remove from watchlist' : 'Add to watchlist');
+        watchButton.setAttribute('aria-label', watchlist.has(listing.id) ? 'Saved, remove from Watchlist' : 'Save to Watchlist');
         watchButton.setAttribute('aria-pressed', String(watchlist.has(listing.id)));
         media.append(watchButton);
 
@@ -403,7 +413,6 @@ export function createMarketplaceUI({ documentRef = document, state, biddingServ
         const status = documentRef.createElement('p');
         status.className = 'listing-transaction-status';
         status.dataset.active = String(transaction.status === TRANSACTION_STATUS.auctionActive);
-        status.setAttribute('aria-live', 'polite');
         const latestDispute = disputeService.getLatestForListing(listing.id);
         status.textContent = listing.listingFormat === LISTING_FORMAT.buyNow
             && transaction.status === TRANSACTION_STATUS.auctionActive
@@ -544,7 +553,7 @@ export function createMarketplaceUI({ documentRef = document, state, biddingServ
         } else if (activeDiscovery === 'newly-listed') {
             sortedListings.sort((first, second) => (Date.parse(second.listedAt) || 0) - (Date.parse(first.listedAt) || 0));
         }
-        listingContainer.replaceChildren(...sortedListings.map(createListingCard));
+        listingContainer.replaceChildren(...sortedListings.map((listing, index) => createListingCard(listing, index === 0)));
         publicListingCount.textContent = String(catalogue.filter(auctionManagement.isPublicListing).length);
         onPublicCountChanged(sortedListings.length);
         applyFilters();
@@ -560,6 +569,7 @@ export function createMarketplaceUI({ documentRef = document, state, biddingServ
             recordEvent(USABILITY_EVENT_TYPE.filterUsed, { metadata: { filter: button.dataset.categoryFilter, category: activeCategory } });
             renderSubcategoryNavigation(activeCategory);
             applyFilters();
+            announceGlobalStatus('Listing filters updated.', documentRef);
         });
 
         subcategoryNavigation.addEventListener('click', event => {
@@ -571,17 +581,20 @@ export function createMarketplaceUI({ documentRef = document, state, biddingServ
                 metadata: { filter: activeSubcategory || activeCategory, category: activeCategory, subcategory: activeSubcategory }
             });
             applyFilters();
+            announceGlobalStatus('Listing filters updated.', documentRef);
         });
 
         documentRef.querySelectorAll('[data-discovery]').forEach(button => {
             button.addEventListener('click', () => {
                 recordEvent(USABILITY_EVENT_TYPE.filterUsed, { metadata: { filter: button.dataset.discovery } });
                 selectDiscovery(button.dataset.discovery);
+                announceGlobalStatus('Listing filters updated.', documentRef);
             });
         });
 
         clearFiltersButton.addEventListener('click', () => {
             selectDiscovery('for-you');
+            announceGlobalStatus('Listing filters cleared.', documentRef);
             listingContainer.querySelector('.listing-card')?.focus();
         });
 
@@ -589,7 +602,7 @@ export function createMarketplaceUI({ documentRef = document, state, biddingServ
             headerSearch.classList.toggle('is-open', isOpen);
             navigation.classList.toggle('search-open', isOpen);
             mobileSearchToggle.setAttribute('aria-expanded', String(isOpen));
-            mobileSearchToggle.setAttribute('aria-label', isOpen ? 'Close search' : 'Open search');
+            mobileSearchToggle.setAttribute('aria-label', isOpen ? 'Search, close' : 'Search, open');
         };
         mobileSearchToggle.addEventListener('click', () => {
             const isOpen = mobileSearchToggle.getAttribute('aria-expanded') !== 'true';
@@ -615,10 +628,12 @@ export function createMarketplaceUI({ documentRef = document, state, biddingServ
             if (activeSearchTerm) recordEvent(USABILITY_EVENT_TYPE.searchUsed, { metadata: { source: 'search' } });
             applyFilters();
         });
+        listingSearchInput.addEventListener('change', () => announceGlobalStatus('Listing filters updated.', documentRef));
         conditionFilter.addEventListener('change', () => {
             activeCondition = conditionFilter.value;
             recordEvent(USABILITY_EVENT_TYPE.filterUsed, { metadata: { filter: 'condition' } });
             applyFilters();
+            announceGlobalStatus('Listing filters updated.', documentRef);
         });
         maximumBidFilter.addEventListener('input', () => {
             const value = maximumBidFilter.value;
@@ -626,20 +641,24 @@ export function createMarketplaceUI({ documentRef = document, state, biddingServ
             if (value !== '') recordEvent(USABILITY_EVENT_TYPE.filterUsed, { metadata: { filter: 'maximum-bid' } });
             applyFilters();
         });
+        maximumBidFilter.addEventListener('change', () => announceGlobalStatus('Listing filters updated.', documentRef));
         watchlistOnlyFilter.addEventListener('change', () => {
             watchlistOnly = watchlistOnlyFilter.checked;
             recordEvent(USABILITY_EVENT_TYPE.filterUsed, { metadata: { filter: 'watchlist' } });
             applyFilters();
+            announceGlobalStatus('Listing filters updated.', documentRef);
         });
         buyNowOnlyFilter.addEventListener('change', () => {
             buyNowOnly = buyNowOnlyFilter.checked;
             recordEvent(USABILITY_EVENT_TYPE.filterUsed, { metadata: { filter: 'buy-now' } });
             applyFilters();
+            announceGlobalStatus('Listing filters updated.', documentRef);
         });
         listingSort.addEventListener('change', () => {
             activeDiscovery = listingSort.value === 'ending-soon' ? 'ending-soon' : 'for-you';
             recordEvent(USABILITY_EVENT_TYPE.filterUsed, { metadata: { filter: 'sort' } });
             renderListings();
+            announceGlobalStatus('Listing filters updated.', documentRef);
         });
 
         listingContainer.addEventListener('click', event => {
@@ -682,6 +701,8 @@ export function createMarketplaceUI({ documentRef = document, state, biddingServ
                 if (!userService.saveWatchlist(currentUser.id, watchlist)) {
                     if (wasWatching) watchlist.add(listingId);
                     else watchlist.delete(listingId);
+                } else {
+                    announceGlobalStatus(wasWatching ? 'Removed from Watchlist.' : 'Added to Watchlist.', documentRef);
                 }
                 renderListings();
                 focusAction(listingId, 'watch');
