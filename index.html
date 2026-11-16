@@ -48,7 +48,7 @@
                         <button id="open-profile-reviews" type="button" data-account-section="profile">Profile and reviews</button>
                         <button id="open-account-details" type="button" data-account-section="details">Account details</button>
                         <button id="profile-share-feedback" type="button">Share feedback</button>
-                        
+
                     </div>
                 </details>
             </nav>
@@ -57,13 +57,13 @@
                 <nav aria-label="Sell an item, Help and safety, My Activity, Profile and reviews, Account details">
                     <a href="#sell">Sell an item</a>
                     <a href="#public-help">Help &amp; safety</a>
-                    
+
                     <p class="mobile-profile-note">Fictional profile: <strong id="mobile-profile-name">Kunal</strong></p>
                     <button id="mobile-open-my-activity" type="button" data-account-section="activity">My Activity</button>
                     <button type="button" data-account-section="profile">Profile and reviews</button>
                     <button type="button" data-account-section="details">Account details</button>
                     <button id="mobile-share-feedback" type="button">Share feedback</button>
-                    
+
                 </nav>
             </details>
         </div>
@@ -89,13 +89,13 @@
             </div>
         </section>
 
-        
 
-        
+
+
         <p class="container bid-error" id="storage-status" role="alert" hidden></p>
         <p class="visually-hidden" id="global-status" role="status" aria-live="polite" aria-atomic="true"></p>
 
-        
+
 
         <section id="listings">
             <div class="container">
@@ -146,9 +146,12 @@
                     </div>
                 </details>
                 <div class="listings" id="listing-container"></div>
-                <div class="no-listings-message" id="no-listings-message" role="status" hidden>
-                    <span>No listings match these filters.</span>
-                    <button id="clear-listing-filters" type="button">Clear filters</button>
+                <div class="no-listings-message" id="no-listings-message" role="status" aria-live="polite" hidden>
+                    <div class="empty-state-content">
+                        <h3>No matches for your search</h3>
+                        <p>Try different keywords, adjust categories, or clear all filters to see more items.</p>
+                        <button id="clear-listing-filters" type="button" class="primary-button">Clear all filters</button>
+                    </div>
                 </div>
             </div>
         </section>
@@ -194,12 +197,23 @@
                 <p class="dialog-current-bid" id="auction-winner-item"></p>
                 <p id="auction-winner-name"></p>
                 <p class="dialog-current-bid" id="auction-winning-bid"></p>
-                <p class="bid-minimum" id="auction-commitment-note"></p>
                 <p class="bid-minimum" id="auction-winner-deadline"></p>
+
+                <details class="winner-deposit-details" open>
+                    <summary>Reservation deposit</summary>
+                    <p class="bid-minimum" id="auction-commitment-note"></p>
+                </details>
+
+                <ol class="winner-journey-stages" aria-label="Purchase process steps">
+                    <li data-stage="confirm" aria-current="step">Confirm purchase</li>
+                    <li data-stage="handover">Choose handover</li>
+                    <li data-stage="complete">Complete handover</li>
+                </ol>
+
                 <div class="bid-actions">
-                    <button class="bid-cancel" id="close-auction-winner" type="button">Close</button>
                     <button class="primary-button" id="continue-auction-booking-token" type="button">Confirm purchase</button>
-                    <button class="bid-cancel" id="decline-auction-win" type="button">Decline purchase</button>
+                    <button class="bid-cancel" id="decline-auction-win" type="button">Decline</button>
+                    <button class="bid-cancel" id="close-auction-winner" type="button">Close</button>
                 </div>
             </div>
         </dialog>
@@ -222,18 +236,52 @@
 
         <dialog class="bid-dialog" id="fulfilment-choice-dialog" aria-labelledby="fulfilment-choice-title">
             <div class="bid-dialog-content">
-                <h2 id="fulfilment-choice-title">Collection or delivery</h2>
+                <h2 id="fulfilment-choice-title">Choose handover</h2>
                 <p class="dialog-current-bid" id="fulfilment-choice-item"></p>
-                <p class="bid-minimum">Meetup is optional. Shipping is a prototype/research-only simulation.</p>
-                <p class="bid-minimum" id="simple-collection-warning"></p>
-                <label id="simple-collection-decline-label" hidden><input id="simple-collection-decline" type="checkbox"> Continue without the recommended inspection</label>
+
+                <ol class="handover-stages" aria-label="Remaining transaction steps">
+                    <li data-stage="handover" aria-current="step">Choose handover</li>
+                    <li data-stage="complete">Complete handover</li>
+                </ol>
+
+                <fieldset class="fulfilment-choice-options">
+                    <legend>How to exchange the item</legend>
+
+                    <label class="fulfilment-option">
+                        <input type="radio" name="fulfilment" value="simple" required>
+                        <div class="fulfilment-option-content">
+                            <div class="fulfilment-option-title">Simple collection</div>
+                            <p class="bid-minimum">Pick up at a location you agree with the seller.</p>
+                        </div>
+                    </label>
+
+                    <label class="fulfilment-option">
+                        <input type="radio" name="fulfilment" value="meetup" required>
+                        <div class="fulfilment-option-content">
+                            <div class="fulfilment-option-title">Public meet and inspect</div>
+                            <p class="bid-minimum">Meet in a public place for inspection. <span id="meetup-recommendation" hidden>Recommended for this item.</span></p>
+                        </div>
+                    </label>
+
+                    <label class="fulfilment-option">
+                        <input type="radio" name="fulfilment" value="shipping" required>
+                        <div class="fulfilment-option-content">
+                            <div class="fulfilment-option-title">Shipping (simulated)</div>
+                            <p class="bid-minimum">View the simulated shipping workflow.</p>
+                        </div>
+                    </label>
+                </fieldset>
+
+                <label id="simple-collection-decline-label" hidden class="inspection-warning">
+                    <input id="simple-collection-decline" type="checkbox">
+                    <span>Proceeding without recommended inspection</span>
+                </label>
+
                 <p class="bid-error" id="fulfilment-choice-error" role="alert"></p>
                 <div class="bid-actions">
-                    <button class="bid-cancel" id="choose-meetup" type="button">Public meet and inspect</button>
-                    <button class="primary-button" id="choose-simple-collection" type="button">Simple collection</button>
-                    <button class="bid-cancel" id="choose-shipping" type="button">View simulated shipping</button>
+                    <button class="bid-cancel" id="close-fulfilment-choice" type="button">Cancel</button>
+                    <button class="primary-button" id="confirm-fulfilment-choice" type="button">Continue</button>
                 </div>
-                <button class="bid-cancel" id="close-fulfilment-choice" type="button">Close</button>
             </div>
         </dialog>
 
@@ -415,7 +463,7 @@
             </div>
         </dialog>
 
-        
+
 
         <dialog class="bid-dialog notification-dialog" id="notification-dialog" aria-labelledby="notification-title">
             <div class="bid-dialog-content">
@@ -432,17 +480,17 @@
             </div>
         </dialog>
 
-        
+
 
         <dialog class="bid-dialog usability-dialog" id="usability-feedback-dialog" aria-labelledby="usability-feedback-title">
             <div class="bid-dialog-content">
                 <h2 id="usability-feedback-title">Share feedback</h2>
                 <p class="bid-minimum">Feedback is saved only in this browser, not sent to a research team. Do not include names, contact details, addresses, or payment information.</p>
                 <form id="usability-feedback-form">
-                    
-                    
-                    
-                    
+
+
+
+
                     <label for="feedback-journey">Journey tested</label>
                     <select id="feedback-journey" required>
                         <option value="">Choose a journey</option>
@@ -511,9 +559,9 @@
             </div>
         </dialog>
 
-        
 
-        
+
+
 
         <dialog class="bid-dialog" id="auction-management-dialog" aria-labelledby="auction-management-title">
             <div class="bid-dialog-content">
@@ -538,7 +586,7 @@
                         <label for="auction-edit-start">Starting bid (INR)</label><input id="auction-edit-start" type="number" min="1" step="1" required>
                         <label for="auction-edit-increment">Bid increment</label><select id="auction-edit-increment" required></select>
                         <label for="auction-edit-buy">Buy Now (INR, optional)</label><input id="auction-edit-buy" type="number" min="1" step="1">
-                        
+
                         <label for="auction-edit-duration">Duration</label><select id="auction-edit-duration"><option value="24">24 hours</option><option value="48">48 hours</option><option value="72">72 hours</option><option value="168">168 hours</option></select>
                     </fieldset>
                     <fieldset id="auction-offer-fields">
@@ -663,6 +711,13 @@
             <div class="bid-dialog-content">
                 <h2 id="seller-listing-title">Create a listing</h2>
                 <p class="bid-minimum">Explore selling a desirable, quality pre-owned item. This research submission stays in this browser and is not a real offer to sell.</p>
+
+                <ol class="seller-journey-stages" aria-label="Selling process overview">
+                    <li data-stage="describe"><span class="stage-title">Describe</span><span class="stage-subtitle">Item details and condition</span></li>
+                    <li data-stage="pricing"><span class="stage-title">Choose how to sell</span><span class="stage-subtitle">Auction, Buy Now, or both</span></li>
+                    <li data-stage="submit"><span class="stage-title">Review and submit</span><span class="stage-subtitle">Confirm your listing</span></li>
+                </ol>
+
                 <form class="seller-listing-form" id="seller-listing-form">
                     <fieldset>
                         <legend>Product</legend>
@@ -741,7 +796,7 @@
                     <select id="seller-auction-duration" name="auctionDurationHours" aria-describedby="seller-listing-error" required></select>
                     </div>
 
-                    
+
                     </fieldset>
 
                     <fieldset class="seller-review-group">
@@ -761,7 +816,7 @@
                             <div><dt>Buy Now</dt><dd id="seller-summary-buy-now">Not set</dd></div>
                             <div><dt>Listing format</dt><dd id="seller-summary-format">Auction</dd></div>
                             <div><dt>Auction duration</dt><dd id="seller-summary-duration">72 hours</dd></div>
-                            
+
                         </dl>
                     <p class="bid-error" id="seller-listing-error" role="alert"></p>
                     <div class="bid-actions">
@@ -798,7 +853,7 @@
             </div>
         </section>
 
-        
+
         <section class="account-area" id="account-area" aria-labelledby="account-heading" hidden>
             <div class="container account-layout">
                 <div class="account-header">
@@ -913,7 +968,7 @@
             <button class="secondary-button" id="share-feedback-footer" type="button">Share feedback</button>
         </div>
         <p class="container footer-prototype-note">Buy and sell quality pre-owned products • Research prototype • No real payments or transactions.</p>
-        
+
     </footer>
     <script type="module" src="app.js"></script>
 </body>

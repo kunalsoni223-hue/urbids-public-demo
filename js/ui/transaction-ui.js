@@ -90,18 +90,40 @@ export function createTransactionUI({ documentRef = document, config, state, bid
         } else {
             activeFulfilmentContext = context;
             documentRef.getElementById('fulfilment-choice-item').textContent = listing.title;
-            const simpleAllowed = transactionStore.canSelectSimpleCollection(context.listingId);
-            documentRef.getElementById('choose-simple-collection').hidden = !simpleAllowed;
-            documentRef.getElementById('simple-collection-error')?.remove();
+
+            // Clear previous state
             documentRef.getElementById('fulfilment-choice-error').textContent = '';
             documentRef.getElementById('simple-collection-decline').checked = false;
+            documentRef.querySelectorAll('input[name="fulfilment"]').forEach(r => { r.checked = false; });
+
+            // Update handover stages
+            const handoverStages = documentRef.querySelectorAll('.handover-stages li');
+            handoverStages.forEach(stage => {
+                if (stage.dataset.stage === 'handover') {
+                    stage.setAttribute('aria-current', 'step');
+                }
+            });
+
+            // Show/hide options based on configuration
+            const simpleAllowed = transactionStore.canSelectSimpleCollection(context.listingId);
+            documentRef.querySelector('input[value="simple"]').parentElement.parentElement.hidden = !simpleAllowed;
+
+            // Show meetup recommendation if technical inspection needed
             const technical = transactionStore.getInspectionReview(context.listingId)?.level === 'Technical';
-            const warning = technical
-                ? 'Inspection recommended. Continuing without inspection may limit mismatch claims to issues that could not reasonably have been identified at handover.'
-                : 'Simple collection is available for this item. Confirm receipt here before completion.';
-            documentRef.getElementById('simple-collection-warning').textContent = `${warning} Prototype policy wording, not legal advice.`;
+            const meetupRec = documentRef.getElementById('meetup-recommendation');
+            if (technical) {
+                meetupRec.hidden = false;
+                documentRef.querySelector('input[value="meetup"]').parentElement.style.borderColor = '#d4a574';
+            } else {
+                meetupRec.hidden = true;
+            }
+
+            // Show inspection warning if needed
             documentRef.getElementById('simple-collection-decline-label').hidden = !technical;
-            documentRef.getElementById('choose-shipping').hidden = method !== FULFILMENT_METHOD.both;
+
+            // Hide shipping if not both
+            documentRef.querySelector('input[value="shipping"]').parentElement.parentElement.hidden = method !== FULFILMENT_METHOD.both;
+
             if (sourceDialog?.open) dialogController.transition(sourceDialog, fulfilmentChoiceDialog);
             else dialogController.open(fulfilmentChoiceDialog, sourceDialog);
         }
@@ -147,9 +169,35 @@ export function createTransactionUI({ documentRef = document, config, state, bid
         documentRef.getElementById('auction-winning-bid').textContent = `Winning bid: ${formatCurrency(transaction.winningBid)}`;
         const amount = transaction.depositAmount || reservationDeposit(transaction.transactionPrice);
         documentRef.getElementById('auction-commitment-note').textContent = depositExplanation(amount);
-        documentRef.getElementById('auction-winner-deadline').textContent = transaction.winnerResponseDeadline
-            ? `Confirm by ${new Date(transaction.winnerResponseDeadline).toLocaleString()}.`
-            : '';
+
+        // Update deadline visibility and content
+        const deadlineEl = documentRef.getElementById('auction-winner-deadline');
+        if (transaction.winnerResponseDeadline && transaction.status === TRANSACTION_STATUS.auctionWon) {
+            deadlineEl.textContent = `Confirm by ${new Date(transaction.winnerResponseDeadline).toLocaleString()}.`;
+            deadlineEl.hidden = false;
+        } else {
+            deadlineEl.hidden = true;
+        }
+
+        // Update journey stages based on transaction status
+        const stages = documentRef.querySelectorAll('.winner-journey-stages li');
+        stages.forEach(stage => {
+            const stageType = stage.dataset.stage;
+            if (stageType === 'confirm') {
+                if (transaction.status === TRANSACTION_STATUS.auctionWon) {
+                    stage.setAttribute('aria-current', 'step');
+                    stage.dataset.state = 'current';
+                } else {
+                    stage.removeAttribute('aria-current');
+                    stage.dataset.state = 'complete';
+                }
+            } else if (stageType === 'handover') {
+                stage.dataset.state = transaction.status !== TRANSACTION_STATUS.auctionWon ? 'current' : 'pending';
+            } else if (stageType === 'complete') {
+                stage.dataset.state = 'pending';
+            }
+        });
+
         documentRef.getElementById('continue-auction-booking-token').hidden = false;
         documentRef.getElementById('decline-auction-win').hidden = transaction.status !== TRANSACTION_STATUS.auctionWon;
         documentRef.getElementById('continue-auction-booking-token').textContent = transaction.status === TRANSACTION_STATUS.tokenCompleted
@@ -444,43 +492,44 @@ export function createTransactionUI({ documentRef = document, config, state, bid
         documentRef.getElementById('buy-now-done').addEventListener('click', () => dialogController.close(buyNowDialog));
         buyNowDialog.addEventListener('close', () => { activeBuyNowListingId = null; activeBookingContext = null; });
 
-        documentRef.getElementById('choose-meetup').addEventListener('click', () => {
-            const context = activeFulfilmentContext;
-            activeFulfilmentContext = null;
-            if (context) {
-                recordEvent(USABILITY_EVENT_TYPE.fulfilmentSelected, { relatedId: context.listingId, metadata: { fulfilment: 'in_person' } });
-                openMeetupForm(context, fulfilmentChoiceDialog);
-            }
-        });
-        documentRef.getElementById('choose-simple-collection').addEventListener('click', () => {
+        documentRef.getElementById('confirm-fulfilment-choice').addEventListener('click', () => {
             const context = activeFulfilmentContext;
             if (!context) return;
+
+            const selected = documentRef.querySelector('input[name="fulfilment"]:checked')?.value;
+            if (!selected) {
+                documentRef.getElementById('fulfilment-choice-error').textContent = 'Please choose how to exchange the item.';
+                return;
+            }
+
             const technical = transactionStore.getInspectionReview(context.listingId)?.level === 'Technical';
-            if (technical && !documentRef.getElementById('simple-collection-decline').checked) {
-                documentRef.getElementById('fulfilment-choice-error').textContent = 'Confirm that you understand the inspection recommendation before continuing.';
-                documentRef.getElementById('simple-collection-decline').focus();
-                return;
-            }
-            const transaction = transactionStore.requestSimpleCollection(context.listingId, {
-                declinedInspection: documentRef.getElementById('simple-collection-decline').checked
-            });
-            if (!transaction) {
-                documentRef.getElementById('fulfilment-choice-error').textContent = 'Simple collection is not available for this item.';
-                return;
-            }
-            recordEvent(USABILITY_EVENT_TYPE.fulfilmentSelected, { relatedId: context.listingId, metadata: { fulfilment: 'simple_collection' } });
-            activeFulfilmentContext = null;
-            renderListings();
-            openHandover(context.listingId, fulfilmentChoiceDialog);
-        });
-        documentRef.getElementById('choose-shipping').addEventListener('click', () => {
-            const context = activeFulfilmentContext;
-            activeFulfilmentContext = null;
-            if (context) {
+
+            if (selected === 'simple') {
+                if (technical && !documentRef.getElementById('simple-collection-decline').checked) {
+                    documentRef.getElementById('fulfilment-choice-error').textContent = 'Confirm that you understand the inspection recommendation before continuing.';
+                    documentRef.getElementById('simple-collection-decline').focus();
+                    return;
+                }
+                const transaction = transactionStore.requestSimpleCollection(context.listingId, {
+                    declinedInspection: documentRef.getElementById('simple-collection-decline').checked
+                });
+                if (!transaction) {
+                    documentRef.getElementById('fulfilment-choice-error').textContent = 'Simple collection is not available for this item.';
+                    return;
+                }
+                recordEvent(USABILITY_EVENT_TYPE.fulfilmentSelected, { relatedId: context.listingId, metadata: { fulfilment: 'simple_collection' } });
+                activeFulfilmentContext = null;
+                renderListings();
+                openHandover(context.listingId, fulfilmentChoiceDialog);
+            } else if (selected === 'meetup') {
+                recordEvent(USABILITY_EVENT_TYPE.fulfilmentSelected, { relatedId: context.listingId, metadata: { fulfilment: 'in_person' } });
+                openMeetupForm(context, fulfilmentChoiceDialog);
+            } else if (selected === 'shipping') {
                 recordEvent(USABILITY_EVENT_TYPE.fulfilmentSelected, { relatedId: context.listingId, metadata: { fulfilment: 'shipping' } });
                 openShippingFlow(context.listingId, fulfilmentChoiceDialog);
             }
         });
+
         documentRef.getElementById('close-fulfilment-choice').addEventListener('click', () => dialogController.close(fulfilmentChoiceDialog));
         fulfilmentChoiceDialog.addEventListener('close', () => { activeFulfilmentContext = null; });
         documentRef.getElementById('request-shipping').addEventListener('click', () => {

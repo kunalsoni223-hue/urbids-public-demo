@@ -112,6 +112,136 @@ export function createListingDialogUI({ documentRef = document, state, biddingSe
         return section;
     }
 
+    function renderQuestion(question, questionList, ownsListing, currentUserId, listing) {
+        const item = documentRef.createElement('article');
+        item.className = 'listing-question';
+
+        // Question section
+        const questionSection = documentRef.createElement('div');
+        questionSection.className = 'listing-question-section';
+        const questionText = documentRef.createElement('p');
+        questionText.className = 'listing-question-text';
+        questionText.textContent = question.question;
+        questionSection.append(questionText);
+
+        // Sample label (single location per batch 10)
+        if (question.prototypeSample) {
+            const sampleLabel = documentRef.createElement('small');
+            sampleLabel.className = 'prototype-sample-label';
+            sampleLabel.textContent = 'Prototype sample';
+            questionSection.append(sampleLabel);
+        }
+
+        item.append(questionSection);
+
+        // Answer section
+        if (question.answer) {
+            const answerSection = documentRef.createElement('div');
+            answerSection.className = 'listing-answer-section';
+            const answer = documentRef.createElement('p');
+            answer.className = 'listing-answer-text';
+            const label = documentRef.createElement('strong');
+            label.textContent = 'Seller answer: ';
+            answer.append(label, documentRef.createTextNode(question.answer));
+            answerSection.append(answer);
+
+            const date = relativeDate(question.answeredAt);
+            if (date) {
+                const time = documentRef.createElement('small');
+                time.className = 'product-details-meta';
+                time.textContent = date;
+                answerSection.append(time);
+            }
+            item.append(answerSection);
+        } else if (question.questioningDemoUserId === currentUserId) {
+            const waiting = documentRef.createElement('p');
+            waiting.className = 'product-details-meta answer-waiting';
+            waiting.textContent = 'Awaiting seller response';
+            item.append(waiting);
+        }
+
+        // Seller answer form
+        if (ownsListing && !question.answer && !question.prototypeSample) {
+            const answerForm = documentRef.createElement('form');
+            answerForm.className = 'seller-answer-form';
+            answerForm.dataset.answerQuestion = question.id;
+            const answerLabel = documentRef.createElement('label');
+            const answerId = `answer-${question.id}`;
+            answerLabel.htmlFor = answerId;
+            answerLabel.textContent = 'Answer publicly';
+            const answerInput = documentRef.createElement('textarea');
+            answerInput.id = answerId;
+            answerInput.maxLength = 500;
+            answerInput.required = true;
+            answerInput.rows = 2;
+            const field = inferListingField(question.question, listing);
+            answerForm.append(answerLabel, answerInput);
+            if (field) {
+                const updateLabel = documentRef.createElement('label');
+                updateLabel.className = 'listing-detail-update-option';
+                const updateInput = documentRef.createElement('input');
+                updateInput.type = 'checkbox';
+                updateInput.dataset.listingDetailField = field;
+                updateInput.disabled = listing.bidCount > 0;
+                updateLabel.append(updateInput, documentRef.createTextNode('Add this answer to listing details'));
+                answerForm.append(updateLabel);
+                if (listing.bidCount > 0) {
+                    const lockNote = documentRef.createElement('small');
+                    lockNote.textContent = 'Listing details are locked after the first bid.';
+                    answerForm.append(lockNote);
+                }
+            }
+            const answerActions = documentRef.createElement('div');
+            answerActions.className = 'listing-question-actions';
+            const answerButton = documentRef.createElement('button');
+            answerButton.type = 'submit';
+            answerButton.className = 'primary-button';
+            answerButton.textContent = 'Post answer';
+            const dismissSelect = documentRef.createElement('select');
+            dismissSelect.setAttribute('aria-label', 'Reason for dismissing this question');
+            dismissSelect.innerHTML = '<option value="duplicate">Duplicate</option><option value="already_answered">Already covered in listing</option><option value="contact_request">Contact or payment request</option><option value="inappropriate">Inappropriate</option><option value="not_relevant">Not relevant</option>';
+            const dismissButton = documentRef.createElement('button');
+            dismissButton.type = 'button';
+            dismissButton.className = 'bid-cancel';
+            dismissButton.dataset.dismissQuestion = question.id;
+            dismissButton.textContent = 'Dismiss';
+            answerActions.append(answerButton, dismissSelect, dismissButton);
+            answerForm.append(answerActions);
+            answerForm.addEventListener('submit', event => {
+                event.preventDefault();
+                if (answerButton.disabled) return;
+                answerButton.disabled = true;
+                const updateField = answerForm.querySelector('[data-listing-detail-field]:checked')?.dataset.listingDetailField || null;
+                const result = engagementService?.answerQuestion(question.id, answerInput.value, currentUserId, updateField);
+                if (!result?.ok) {
+                    answerButton.disabled = false;
+                    const message = result?.code === 'listing_locked'
+                        ? 'Listing details are locked after the first bid. Uncheck the listing update and post the public answer.'
+                        : 'The answer could not be saved. Remove contact, payment or address details and try again.';
+                    announceGlobalStatus(message, documentRef, { allowDialog: true });
+                    return;
+                }
+                recordEvent(USABILITY_EVENT_TYPE.sellerAnswerSubmitted, { relatedId: listing.id, metadata: { category: listing.category, subcategory: listing.subcategory, questionType: 'general', source: 'product_details' } });
+                if (updateField) recordEvent(USABILITY_EVENT_TYPE.answerAddedToListing, { relatedId: listing.id, metadata: { category: listing.category, subcategory: listing.subcategory, questionType: updateField, source: 'product_details' } });
+                renderListings();
+                showProductDetails(listing.id);
+                announceGlobalStatus(updateField ? 'Seller answer saved and listing details updated.' : 'Seller answer saved publicly.', documentRef, { allowDialog: true });
+            });
+            dismissButton.addEventListener('click', () => {
+                const result = engagementService?.dismissQuestion(question.id, currentUserId, dismissSelect.value);
+                if (!result?.ok) {
+                    announceGlobalStatus('This question could not be dismissed.', documentRef, { allowDialog: true });
+                    return;
+                }
+                renderEngagement(listing);
+                announceGlobalStatus('Question dismissed from the public listing.', documentRef, { allowDialog: true });
+            });
+            item.append(answerForm);
+        }
+
+        questionList.append(item);
+    }
+
     function renderEngagement(listing) {
         const currentUserId = userService.getCurrentUser().id;
         const ownsListing = userService.isListingOwner(listing.id);
@@ -127,122 +257,45 @@ export function createListingDialogUI({ documentRef = document, state, biddingSe
         const questionList = documentRef.createElement('div');
         questionList.className = 'listing-question-list';
         const questions = engagementService?.getQuestions(listing.id, currentUserId) || [];
-        questions.forEach(question => {
-            const item = documentRef.createElement('article');
-            item.className = 'listing-question';
-            const questionText = documentRef.createElement('p');
-            questionText.className = 'listing-question-text';
-            questionText.textContent = question.question;
-            item.append(questionText);
-            if (question.answer) {
-                const answer = documentRef.createElement('p');
-                answer.className = 'listing-answer-text';
-                const label = documentRef.createElement('strong');
-                label.textContent = 'Seller answer: ';
-                answer.append(label, documentRef.createTextNode(question.answer));
-                item.append(answer);
-                const date = relativeDate(question.answeredAt);
-                if (date) {
-                    const time = documentRef.createElement('small');
-                    time.className = 'product-details-meta';
-                    time.textContent = date;
-                    item.append(time);
-                }
-            } else if (question.questioningDemoUserId === currentUserId) {
-                const waiting = documentRef.createElement('p');
-                waiting.className = 'product-details-meta';
-                waiting.textContent = 'Awaiting seller response';
-                item.append(waiting);
-            }
-            if (question.prototypeSample) {
-                const sampleLabel = documentRef.createElement('small');
-                sampleLabel.className = 'prototype-sample-label';
-                sampleLabel.textContent = 'Prototype sample';
-                item.append(sampleLabel);
-            }
-            if (ownsListing && !question.answer && !question.prototypeSample) {
-                const answerForm = documentRef.createElement('form');
-                answerForm.className = 'seller-answer-form';
-                answerForm.dataset.answerQuestion = question.id;
-                const answerLabel = documentRef.createElement('label');
-                const answerId = `answer-${question.id}`;
-                answerLabel.htmlFor = answerId;
-                answerLabel.textContent = 'Answer publicly';
-                const answerInput = documentRef.createElement('textarea');
-                answerInput.id = answerId;
-                answerInput.maxLength = 500;
-                answerInput.required = true;
-                answerInput.rows = 2;
-                const field = inferListingField(question.question, listing);
-                answerForm.append(answerLabel, answerInput);
-                if (field) {
-                    const updateLabel = documentRef.createElement('label');
-                    updateLabel.className = 'listing-detail-update-option';
-                    const updateInput = documentRef.createElement('input');
-                    updateInput.type = 'checkbox';
-                    updateInput.dataset.listingDetailField = field;
-                    updateInput.disabled = listing.bidCount > 0;
-                    updateLabel.append(updateInput, documentRef.createTextNode('Add this answer to listing details'));
-                    answerForm.append(updateLabel);
-                    if (listing.bidCount > 0) {
-                        const lockNote = documentRef.createElement('small');
-                        lockNote.textContent = 'Listing details are locked after the first bid.';
-                        answerForm.append(lockNote);
-                    }
-                }
-                const answerActions = documentRef.createElement('div');
-                answerActions.className = 'listing-question-actions';
-                const answerButton = documentRef.createElement('button');
-                answerButton.type = 'submit';
-                answerButton.className = 'primary-button';
-                answerButton.textContent = 'Post answer';
-                const dismissSelect = documentRef.createElement('select');
-                dismissSelect.setAttribute('aria-label', 'Reason for dismissing this question');
-                dismissSelect.innerHTML = '<option value="duplicate">Duplicate</option><option value="already_answered">Already covered in listing</option><option value="contact_request">Contact or payment request</option><option value="inappropriate">Inappropriate</option><option value="not_relevant">Not relevant</option>';
-                const dismissButton = documentRef.createElement('button');
-                dismissButton.type = 'button';
-                dismissButton.className = 'bid-cancel';
-                dismissButton.dataset.dismissQuestion = question.id;
-                dismissButton.textContent = 'Dismiss';
-                answerActions.append(answerButton, dismissSelect, dismissButton);
-                answerForm.append(answerActions);
-                answerForm.addEventListener('submit', event => {
-                    event.preventDefault();
-                    if (answerButton.disabled) return;
-                    answerButton.disabled = true;
-                    const updateField = answerForm.querySelector('[data-listing-detail-field]:checked')?.dataset.listingDetailField || null;
-                    const result = engagementService?.answerQuestion(question.id, answerInput.value, currentUserId, updateField);
-                    if (!result?.ok) {
-                        answerButton.disabled = false;
-                        const message = result?.code === 'listing_locked'
-                            ? 'Listing details are locked after the first bid. Uncheck the listing update and post the public answer.'
-                            : 'The answer could not be saved. Remove contact, payment or address details and try again.';
-                        announceGlobalStatus(message, documentRef, { allowDialog: true });
-                        return;
-                    }
-                    recordEvent(USABILITY_EVENT_TYPE.sellerAnswerSubmitted, { relatedId: listing.id, metadata: { category: listing.category, subcategory: listing.subcategory, questionType: 'general', source: 'product_details' } });
-                    if (updateField) recordEvent(USABILITY_EVENT_TYPE.answerAddedToListing, { relatedId: listing.id, metadata: { category: listing.category, subcategory: listing.subcategory, questionType: updateField, source: 'product_details' } });
-                    renderListings();
-                    showProductDetails(listing.id);
-                    announceGlobalStatus(updateField ? 'Seller answer saved and listing details updated.' : 'Seller answer saved publicly.', documentRef, { allowDialog: true });
-                });
-                dismissButton.addEventListener('click', () => {
-                    const result = engagementService?.dismissQuestion(question.id, currentUserId, dismissSelect.value);
-                    if (!result?.ok) {
-                        announceGlobalStatus('This question could not be dismissed.', documentRef, { allowDialog: true });
-                        return;
-                    }
-                    renderEngagement(listing);
-                    announceGlobalStatus('Question dismissed from the public listing.', documentRef, { allowDialog: true });
-                });
-                item.append(answerForm);
-            }
-            questionList.append(item);
+
+        // Separate sample questions from real questions
+        const sampleQuestions = questions.filter(q => q.prototypeSample);
+        const realQuestions = questions.filter(q => !q.prototypeSample);
+
+        // Show up to 3 sample questions initially
+        let questionCount = 0;
+        const maxSampleShown = 3;
+
+        realQuestions.forEach(question => {
+            renderQuestion(question, questionList, ownsListing, currentUserId, listing);
+            questionCount++;
         });
+
+        sampleQuestions.slice(0, maxSampleShown).forEach(question => {
+            renderQuestion(question, questionList, ownsListing, currentUserId, listing);
+            questionCount++;
+        });
+
+        // Add "View all sample questions" if more exist
+        if (sampleQuestions.length > maxSampleShown) {
+            const viewAll = documentRef.createElement('button');
+            viewAll.type = 'button';
+            viewAll.className = 'link-button';
+            viewAll.textContent = `View all ${sampleQuestions.length} sample questions`;
+            viewAll.addEventListener('click', () => {
+                sampleQuestions.slice(maxSampleShown).forEach(question => {
+                    renderQuestion(question, questionList, ownsListing, currentUserId, listing);
+                });
+                viewAll.remove();
+            });
+            questionList.append(viewAll);
+        }
+
+
         if (!questions.length) {
             const empty = documentRef.createElement('p');
             empty.className = 'product-details-meta';
-            empty.textContent = 'No questions yet.';
+            empty.textContent = 'No questions yet. Ask the seller about specifics to build your confidence.';
             questionList.append(empty);
         }
         questionsSection.append(questionList);
