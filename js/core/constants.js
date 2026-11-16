@@ -11,7 +11,9 @@ export const STORAGE_KEYS = Object.freeze({
     auctionTransactions: 'urbids-demo-auction-transactions',
     notifications: 'urbids-demo-notifications',
     feedback: 'urbids-demo-feedback',
-    userProfiles: 'urbids-demo-user-profiles'
+    userProfiles: 'urbids-demo-user-profiles',
+    listingQuestions: 'urbids-demo-listing-questions',
+    recentlyViewed: 'urbids-demo-recently-viewed'
 });
 
 export const PROTOTYPE_STORAGE_SCHEMA_VERSION = 1;
@@ -121,6 +123,15 @@ export const USABILITY_EVENT_TYPE = Object.freeze({
     transactionCompleted: 'transaction_completed',
     sellerSubmissionStarted: 'seller_submission_started',
     sellerSubmissionCompleted: 'seller_submission_completed',
+    questionStarted: 'question_started',
+    questionSubmitted: 'question_submitted',
+    sellerAnswerSubmitted: 'seller_answer_submitted',
+    answerAddedToListing: 'answer_added_to_listing',
+    additionalPhotoRequested: 'additional_photo_requested',
+    listingShared: 'listing_shared',
+    similarListingOpened: 'similar_listing_opened',
+    sellerListingOpened: 'seller_listing_opened',
+    recentlyViewedOpened: 'recently_viewed_opened',
     feedbackSubmitted: 'feedback_submitted'
 });
 
@@ -552,7 +563,8 @@ export const NOTIFICATION_TYPE = Object.freeze({
     disputeResolved: 'dispute_resolved',
     ratingReceived: 'rating_received',
     listingPublished: 'listing_published',
-    listingRejected: 'listing_rejected'
+    listingRejected: 'listing_rejected',
+    listingQuestion: 'listing_question'
 });
 
 export const RATING_CONSTRAINTS = Object.freeze({

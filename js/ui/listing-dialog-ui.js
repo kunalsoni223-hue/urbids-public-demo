@@ -1,4 +1,4 @@
-import { DEFAULT_FULFILMENT_METHOD, DISPUTE_RESOLUTION, DISPUTE_RESOLUTION_LABELS, FULFILMENT_METHOD, FULFILMENT_METHOD_LABELS, LISTING_FORMAT, SERVICE_ERROR_CODE, SPECIFICATION_FIELDS_BY_SUBCATEGORY, SPECIFICATION_FIELD_LABELS, TRANSACTION_STATUS, USABILITY_EVENT_TYPE } from '../core/constants.js';
+import { CATEGORY, DEFAULT_FULFILMENT_METHOD, DISPUTE_RESOLUTION, DISPUTE_RESOLUTION_LABELS, FULFILMENT_METHOD, FULFILMENT_METHOD_LABELS, LISTING_FORMAT, SERVICE_ERROR_CODE, SPECIFICATION_FIELDS_BY_SUBCATEGORY, SPECIFICATION_FIELD_LABELS, TRANSACTION_STATUS, USABILITY_EVENT_TYPE } from '../core/constants.js';
 import { formatCurrency, formatTimeRemaining } from '../core/formatting.js';
 import { getTransactionTimeline, transactionStatusLabel } from '../services/transaction-service.js';
 import { listingPlaceholderLabel } from '../services/listing-service.js';
@@ -6,7 +6,7 @@ import { normalizeSpecifications } from '../core/normalization.js';
 import { renderTransactionTimeline } from './transaction-timeline-ui.js';
 import { announceGlobalStatus } from './status-announcer.js';
 
-export function createListingDialogUI({ documentRef = document, state, biddingService, activityService, auctionManagement, watchlistService, dialogController, renderListings, recordEvent = () => {} }) {
+export function createListingDialogUI({ documentRef = document, state, biddingService, activityService, auctionManagement, watchlistService, engagementService, dialogController, renderListings, renderRecentlyViewed = () => {}, recordEvent = () => {} }) {
     const { listingStates, transactionStore, userService } = state;
     const disputeService = state.disputeService;
     const detailsDialog = documentRef.getElementById('product-details-dialog');
@@ -34,6 +34,380 @@ export function createListingDialogUI({ documentRef = document, state, biddingSe
     let reportIssueHandler = () => {};
     let primaryActionHandler = () => {};
     let sellerProfileHandler = () => {};
+    let historyEntryForDialog = false;
+    let questionStartedForListing = null;
+    const engagementRoot = documentRef.createElement('section');
+    engagementRoot.className = 'product-detail-engagement';
+    documentRef.querySelector('.product-detail-sections').after(engagementRoot);
+    const shareButton = documentRef.createElement('button');
+    shareButton.type = 'button';
+    shareButton.className = 'bid-cancel product-share-button';
+    shareButton.textContent = 'Share';
+    shareButton.setAttribute('aria-label', 'Share this listing');
+    documentRef.getElementById('close-product-details').before(shareButton);
+
+    function relativeDate(value) {
+        const elapsedDays = Math.floor((Date.now() - Date.parse(value)) / 86400000);
+        if (!Number.isFinite(elapsedDays) || elapsedDays < 0) return '';
+        return elapsedDays === 0 ? 'today' : elapsedDays === 1 ? 'yesterday' : `${elapsedDays} days ago`;
+    }
+
+    function inferListingField(question, listing) {
+        const text = question.toLowerCase();
+        const supportedFields = new Set(SPECIFICATION_FIELDS_BY_SUBCATEGORY[listing.subcategory] || []);
+        const supported = field => supportedFields.has(field) ? field : null;
+        if (listing.category === CATEGORY.fashion && /measurement|size/.test(text)) return supported('size');
+        if (listing.category === CATEGORY.furniture && /wear|mark|scratch|condition/.test(text)) return supported('signsOfWear');
+        if (/battery|charge cycle/.test(text)) return supported('batteryHealth');
+        if (/included|accessor|come with/.test(text)) return supported('includedAccessories');
+        if (/defect|mark|scratch|wear|condition/.test(text)) return supported('knownDefects') || supported('signsOfWear');
+        if (/proof|receipt|purchase/.test(text)) return supported('proofOfPurchase');
+        if (/warranty/.test(text)) return supported('warrantyStatus');
+        if (/dimension|measurement|size/.test(text)) return supported('dimensions');
+        if (/collection|access|disassembl/.test(text)) return supported('collectionRequirements');
+        if (/service|repair|maintenance/.test(text)) return supported('serviceHistory');
+        if (/work|operate|functional|power on/.test(text)) return supported('functionalStatus');
+        if (/edition|printing/.test(text)) return supported('edition');
+        if (/complete|volume|part/.test(text)) return supported('completeness');
+        if (/marking|annotation|written/.test(text)) return supported('annotations');
+        if (/packaging|box/.test(text)) return supported('originalPackaging');
+        return null;
+    }
+
+    function compactListingSection(title, listings, eventType, source) {
+        if (!listings.length) return null;
+        const section = documentRef.createElement('section');
+        section.className = 'product-detail-section discovery-detail-section';
+        const heading = documentRef.createElement('h3');
+        heading.className = 'product-section-heading';
+        heading.textContent = title;
+        const grid = documentRef.createElement('div');
+        grid.className = 'detail-listing-grid';
+        listings.forEach(listing => {
+            const button = documentRef.createElement('button');
+            button.type = 'button';
+            button.className = 'detail-listing-card';
+            button.dataset.openListing = listing.id;
+            const titleText = documentRef.createElement('strong');
+            titleText.textContent = listing.title;
+            const price = documentRef.createElement('span');
+            price.textContent = `${listing.listingFormat === LISTING_FORMAT.buyNow ? 'Buy Now' : 'Current bid'} · ${formatCurrency(listing.listingFormat === LISTING_FORMAT.buyNow ? listing.buyNowPrice : listing.currentBid)}`;
+            button.append(titleText, price);
+            if (listing.image) {
+                const thumbnail = documentRef.createElement('img');
+                thumbnail.src = listing.image;
+                thumbnail.alt = '';
+                thumbnail.loading = 'lazy';
+                thumbnail.width = 96;
+                thumbnail.height = 76;
+                button.prepend(thumbnail);
+            }
+            button.addEventListener('click', () => {
+                recordEvent(eventType, { relatedId: listing.id, metadata: { category: listing.category, subcategory: listing.subcategory, source } });
+                showProductDetails(listing.id);
+            });
+            grid.append(button);
+        });
+        section.append(heading, grid);
+        return section;
+    }
+
+    function renderEngagement(listing) {
+        const currentUserId = userService.getCurrentUser().id;
+        const ownsListing = userService.isListingOwner(listing.id);
+        const root = documentRef.createElement('div');
+        root.className = 'product-detail-engagement-content';
+        const questionsSection = documentRef.createElement('section');
+        questionsSection.className = 'product-detail-section listing-questions';
+        const heading = documentRef.createElement('h3');
+        heading.className = 'product-section-heading';
+        heading.textContent = 'Questions about this item';
+        heading.tabIndex = -1;
+        questionsSection.append(heading);
+        const questionList = documentRef.createElement('div');
+        questionList.className = 'listing-question-list';
+        const questions = engagementService?.getQuestions(listing.id, currentUserId) || [];
+        questions.forEach(question => {
+            const item = documentRef.createElement('article');
+            item.className = 'listing-question';
+            const questionText = documentRef.createElement('p');
+            questionText.className = 'listing-question-text';
+            questionText.textContent = question.question;
+            item.append(questionText);
+            if (question.answer) {
+                const answer = documentRef.createElement('p');
+                answer.className = 'listing-answer-text';
+                const label = documentRef.createElement('strong');
+                label.textContent = 'Seller answer: ';
+                answer.append(label, documentRef.createTextNode(question.answer));
+                item.append(answer);
+                const date = relativeDate(question.answeredAt);
+                if (date) {
+                    const time = documentRef.createElement('small');
+                    time.className = 'product-details-meta';
+                    time.textContent = date;
+                    item.append(time);
+                }
+            } else if (question.questioningDemoUserId === currentUserId) {
+                const waiting = documentRef.createElement('p');
+                waiting.className = 'product-details-meta';
+                waiting.textContent = 'Awaiting seller response';
+                item.append(waiting);
+            }
+            if (question.prototypeSample) {
+                const sampleLabel = documentRef.createElement('small');
+                sampleLabel.className = 'prototype-sample-label';
+                sampleLabel.textContent = 'Prototype sample';
+                item.append(sampleLabel);
+            }
+            if (ownsListing && !question.answer && !question.prototypeSample) {
+                const answerForm = documentRef.createElement('form');
+                answerForm.className = 'seller-answer-form';
+                answerForm.dataset.answerQuestion = question.id;
+                const answerLabel = documentRef.createElement('label');
+                const answerId = `answer-${question.id}`;
+                answerLabel.htmlFor = answerId;
+                answerLabel.textContent = 'Answer publicly';
+                const answerInput = documentRef.createElement('textarea');
+                answerInput.id = answerId;
+                answerInput.maxLength = 500;
+                answerInput.required = true;
+                answerInput.rows = 2;
+                const field = inferListingField(question.question, listing);
+                answerForm.append(answerLabel, answerInput);
+                if (field) {
+                    const updateLabel = documentRef.createElement('label');
+                    updateLabel.className = 'listing-detail-update-option';
+                    const updateInput = documentRef.createElement('input');
+                    updateInput.type = 'checkbox';
+                    updateInput.dataset.listingDetailField = field;
+                    updateInput.disabled = listing.bidCount > 0;
+                    updateLabel.append(updateInput, documentRef.createTextNode('Add this answer to listing details'));
+                    answerForm.append(updateLabel);
+                    if (listing.bidCount > 0) {
+                        const lockNote = documentRef.createElement('small');
+                        lockNote.textContent = 'Listing details are locked after the first bid.';
+                        answerForm.append(lockNote);
+                    }
+                }
+                const answerActions = documentRef.createElement('div');
+                answerActions.className = 'listing-question-actions';
+                const answerButton = documentRef.createElement('button');
+                answerButton.type = 'submit';
+                answerButton.className = 'primary-button';
+                answerButton.textContent = 'Post answer';
+                const dismissSelect = documentRef.createElement('select');
+                dismissSelect.setAttribute('aria-label', 'Reason for dismissing this question');
+                dismissSelect.innerHTML = '<option value="duplicate">Duplicate</option><option value="already_answered">Already covered in listing</option><option value="contact_request">Contact or payment request</option><option value="inappropriate">Inappropriate</option><option value="not_relevant">Not relevant</option>';
+                const dismissButton = documentRef.createElement('button');
+                dismissButton.type = 'button';
+                dismissButton.className = 'bid-cancel';
+                dismissButton.dataset.dismissQuestion = question.id;
+                dismissButton.textContent = 'Dismiss';
+                answerActions.append(answerButton, dismissSelect, dismissButton);
+                answerForm.append(answerActions);
+                answerForm.addEventListener('submit', event => {
+                    event.preventDefault();
+                    if (answerButton.disabled) return;
+                    answerButton.disabled = true;
+                    const updateField = answerForm.querySelector('[data-listing-detail-field]:checked')?.dataset.listingDetailField || null;
+                    const result = engagementService?.answerQuestion(question.id, answerInput.value, currentUserId, updateField);
+                    if (!result?.ok) {
+                        answerButton.disabled = false;
+                        const message = result?.code === 'listing_locked'
+                            ? 'Listing details are locked after the first bid. Uncheck the listing update and post the public answer.'
+                            : 'The answer could not be saved. Remove contact, payment or address details and try again.';
+                        announceGlobalStatus(message, documentRef, { allowDialog: true });
+                        return;
+                    }
+                    recordEvent(USABILITY_EVENT_TYPE.sellerAnswerSubmitted, { relatedId: listing.id, metadata: { category: listing.category, subcategory: listing.subcategory, questionType: 'general', source: 'product_details' } });
+                    if (updateField) recordEvent(USABILITY_EVENT_TYPE.answerAddedToListing, { relatedId: listing.id, metadata: { category: listing.category, subcategory: listing.subcategory, questionType: updateField, source: 'product_details' } });
+                    renderListings();
+                    showProductDetails(listing.id);
+                    announceGlobalStatus(updateField ? 'Seller answer saved and listing details updated.' : 'Seller answer saved publicly.', documentRef, { allowDialog: true });
+                });
+                dismissButton.addEventListener('click', () => {
+                    const result = engagementService?.dismissQuestion(question.id, currentUserId, dismissSelect.value);
+                    if (!result?.ok) {
+                        announceGlobalStatus('This question could not be dismissed.', documentRef, { allowDialog: true });
+                        return;
+                    }
+                    renderEngagement(listing);
+                    announceGlobalStatus('Question dismissed from the public listing.', documentRef, { allowDialog: true });
+                });
+                item.append(answerForm);
+            }
+            questionList.append(item);
+        });
+        if (!questions.length) {
+            const empty = documentRef.createElement('p');
+            empty.className = 'product-details-meta';
+            empty.textContent = 'No questions yet.';
+            questionList.append(empty);
+        }
+        questionsSection.append(questionList);
+        const askForm = documentRef.createElement('form');
+        askForm.className = 'ask-listing-question-form';
+        const askHeading = documentRef.createElement('h4');
+        askHeading.textContent = 'Ask the seller';
+        const requestSelect = documentRef.createElement('select');
+        requestSelect.setAttribute('aria-label', 'Choose a question prompt');
+        requestSelect.innerHTML = '<option value="">Choose a request (optional)</option>';
+        const prompts = {
+            [CATEGORY.electronics]: [['battery', 'Ask about battery', 'How is the battery condition?'], ['included', 'Ask what is included', 'What accessories are included?'], ['defects', 'Ask about defects', 'Are there any known defects or visible wear?'], ['photo', 'Request another photo', 'Could you add another photo of the item?']],
+            [CATEGORY.furniture]: [['dimensions', 'Ask for dimensions', 'Could you share the dimensions?'], ['wear', 'Ask about visible wear', 'Are there any visible marks or wear?'], ['collection', 'Ask about collection/access', 'Are there any collection or access requirements?'], ['photo', 'Request another photo', 'Could you add another photo of the item?']],
+            [CATEGORY.homeAppliances]: [['works', 'Ask whether it works', 'Does it work as expected?'], ['included', 'Ask what is included', 'What accessories are included?'], ['service_history', 'Ask about service history', 'Has it had any servicing or repairs?'], ['photo', 'Request another photo', 'Could you add another photo of the item?']],
+            [CATEGORY.fashion]: [['measurements', 'Ask for measurements', 'Could you share the measurements?'], ['wear', 'Ask about wear', 'Is there any notable wear or damage?'], ['proof_packaging', 'Ask about proof/packaging', 'Is proof of purchase or original packaging available?'], ['photo', 'Request another photo', 'Could you add another photo of the item?']],
+            [CATEGORY.booksCollectibles]: [['edition', 'Ask about edition', 'Which edition or printing is this?'], ['markings', 'Ask about markings', 'Are there any markings or annotations?'], ['completeness', 'Ask whether complete', 'Is the set complete, including all parts?'], ['photo', 'Request another photo', 'Could you add another photo of the item?']]
+        };
+        const categoryPrompts = prompts[listing.category] || prompts[CATEGORY.electronics];
+        categoryPrompts.forEach(([type, label, text]) => {
+            const option = documentRef.createElement('option');
+            option.value = type;
+            option.textContent = label;
+            option.dataset.question = text;
+            requestSelect.append(option);
+        });
+        const askLabel = documentRef.createElement('label');
+        const askId = `question-input-${listing.id}`;
+        askLabel.htmlFor = askId;
+        askLabel.textContent = 'Your question';
+        const askInput = documentRef.createElement('textarea');
+        askInput.id = askId;
+        askInput.maxLength = 300;
+        askInput.required = true;
+        askInput.rows = 3;
+        askInput.disabled = ownsListing;
+        const guidance = documentRef.createElement('small');
+        guidance.textContent = 'Do not share contact, payment or address details.';
+        const askButton = documentRef.createElement('button');
+        askButton.type = 'submit';
+        askButton.className = 'primary-button';
+        askButton.textContent = 'Submit question';
+        askButton.disabled = ownsListing;
+        const status = documentRef.createElement('p');
+        status.className = 'listing-question-status';
+        status.setAttribute('role', 'status');
+        if (ownsListing) status.textContent = 'You own this listing and cannot ask the seller a question.';
+        askForm.append(askHeading, requestSelect, askLabel, askInput, guidance, askButton, status);
+        if (!ownsListing) {
+            askInput.addEventListener('focus', () => {
+                if (questionStartedForListing === listing.id) return;
+                questionStartedForListing = listing.id;
+                recordEvent(USABILITY_EVENT_TYPE.questionStarted, { relatedId: listing.id, metadata: { category: listing.category, subcategory: listing.subcategory, source: 'product_details' } });
+            });
+            requestSelect.addEventListener('change', () => {
+                const option = requestSelect.selectedOptions[0];
+                if (!option?.dataset.question) return;
+                askInput.value = option.dataset.question;
+                askInput.focus();
+                askInput.setSelectionRange(askInput.value.length, askInput.value.length);
+            });
+            askForm.addEventListener('submit', event => {
+                event.preventDefault();
+                if (askButton.disabled) return;
+                askButton.disabled = true;
+                const type = requestSelect.value || 'general';
+                const result = engagementService?.askQuestion(listing.id, askInput.value, { questionType: type });
+                if (!result?.ok) {
+                    status.textContent = result?.code === 'storage_failed'
+                        ? 'The question could not be saved in this browser.'
+                        : 'Remove contact, payment or address details and enter a question up to 300 characters.';
+                    askButton.disabled = false;
+                    return;
+                }
+                recordEvent(USABILITY_EVENT_TYPE.questionSubmitted, { relatedId: listing.id, metadata: { category: listing.category, subcategory: listing.subcategory, questionType: type, source: 'product_details' } });
+                if (type === 'photo') recordEvent(USABILITY_EVENT_TYPE.additionalPhotoRequested, { relatedId: listing.id, metadata: { category: listing.category, subcategory: listing.subcategory, questionType: type, source: 'product_details' } });
+                renderEngagement(listing);
+                const currentStatus = engagementRoot.querySelector('.listing-question-status');
+                if (currentStatus) currentStatus.textContent = 'Question saved as public listing information in this browser.';
+                renderRecentlyViewed();
+            });
+        }
+        root.append(questionsSection, askForm);
+        const shareStatus = documentRef.createElement('p');
+        shareStatus.className = 'listing-share-status';
+        shareStatus.setAttribute('role', 'status');
+        const similar = engagementService?.getSimilarListings(listing.id, auctionManagement.isPublicListing) || [];
+        const fromSeller = engagementService?.getSellerListings(listing.sellerUserId, listing.id, auctionManagement.isPublicListing) || [];
+        const similarSection = compactListingSection('Similar finds', similar, USABILITY_EVENT_TYPE.similarListingOpened, 'similar_finds');
+        const sellerSection = compactListingSection('More from this seller', fromSeller, USABILITY_EVENT_TYPE.sellerListingOpened, 'seller_listings');
+        root.append(shareStatus);
+        engagementRoot.replaceChildren(root, ...[similarSection, sellerSection].filter(Boolean));
+    }
+
+    async function shareListing() {
+        const listing = listingStates.get(activeDetailsListingId);
+        if (!listing) return;
+        const windowRef = documentRef.defaultView;
+        const shareUrl = new URL(windowRef.location.pathname, windowRef.location.origin);
+        shareUrl.hash = `listing=${encodeURIComponent(listing.id)}`;
+        const status = engagementRoot.querySelector('.listing-share-status');
+        let method = 'copied';
+        try {
+            if (typeof windowRef.navigator.share === 'function') {
+                await windowRef.navigator.share({ title: listing.title, text: `${listing.title} · Urbids prototype listing`, url: shareUrl.href });
+                method = 'native';
+                if (status) status.textContent = 'Listing link shared.';
+            } else {
+                if (windowRef.navigator.clipboard?.writeText) await windowRef.navigator.clipboard.writeText(shareUrl.href);
+                else {
+                    const copyInput = documentRef.createElement('textarea');
+                    copyInput.value = shareUrl.href;
+                    copyInput.setAttribute('readonly', '');
+                    copyInput.style.position = 'fixed';
+                    copyInput.style.opacity = '0';
+                    documentRef.body.append(copyInput);
+                    copyInput.select();
+                    const copied = documentRef.execCommand('copy');
+                    copyInput.remove();
+                    if (!copied) throw new Error('Clipboard unavailable');
+                }
+                if (status) status.textContent = 'Listing link copied.';
+            }
+            recordEvent(USABILITY_EVENT_TYPE.listingShared, { relatedId: listing.id, metadata: { category: listing.category, subcategory: listing.subcategory, shareMethod: method, source: 'product_details' } });
+        } catch (error) {
+            if (error?.name === 'AbortError') return;
+            if (status) status.textContent = 'Could not share this link. Select and copy the page URL.';
+        }
+    }
+
+    function closeProductDetails() {
+        const windowRef = documentRef.defaultView;
+        if (historyEntryForDialog && windowRef.history.state?.urbidsListingId === activeDetailsListingId) {
+            historyEntryForDialog = false;
+            windowRef.history.back();
+            return;
+        }
+        const cleanUrl = `${windowRef.location.pathname}${windowRef.location.search}`;
+        windowRef.history.replaceState(null, '', cleanUrl);
+        historyEntryForDialog = false;
+        dialogController.close(detailsDialog);
+    }
+
+    function handleListingLocation() {
+        const windowRef = documentRef.defaultView;
+        const match = windowRef.location.hash.match(/^#listing=([A-Za-z0-9_-]+)$/);
+        if (!match) {
+            if (detailsDialog.open) dialogController.close(detailsDialog);
+            historyEntryForDialog = false;
+            if (windowRef.location.hash.startsWith('#listing=')) {
+                windowRef.history.replaceState(null, '', `${windowRef.location.pathname}${windowRef.location.search}`);
+            }
+            return;
+        }
+        const listingId = decodeURIComponent(match[1]);
+        if (!listingStates.has(listingId)) {
+            windowRef.history.replaceState(null, '', `${windowRef.location.pathname}${windowRef.location.search}`);
+            if (detailsDialog.open) dialogController.close(detailsDialog);
+            return;
+        }
+        historyEntryForDialog = windowRef.history.state?.urbidsListingId === listingId;
+        showProductDetails(listingId, undefined, { syncHash: false });
+    }
+
+    shareButton.addEventListener('click', shareListing);
+    documentRef.defaultView.addEventListener('popstate', handleListingLocation);
     documentRef.querySelector('.seller-profile-compact').addEventListener('click', event => {
         const listing = listingStates.get(activeDetailsListingId);
         if (!listing || !userService.getUser(listing.sellerUserId)
@@ -62,13 +436,24 @@ export function createListingDialogUI({ documentRef = document, state, biddingSe
         focusTarget?.focus({ preventScroll: true });
     }
 
-    function showProductDetails(listingId, returnFocus) {
+    function showProductDetails(listingId, returnFocus, { syncHash = true } = {}) {
         const listing = listingStates.get(listingId);
         if (!listing) return;
+        if (syncHash) {
+            const windowRef = documentRef.defaultView;
+            const nextHash = `#listing=${encodeURIComponent(listingId)}`;
+            if (windowRef.location.hash !== nextHash) {
+                const nextUrl = `${windowRef.location.pathname}${windowRef.location.search}${nextHash}`;
+                windowRef.history.pushState({ urbidsListingId: listingId }, '', nextUrl);
+                historyEntryForDialog = true;
+            }
+        }
         activeDetailsListingId = listingId;
         biddingService.closeExpiredAuctions();
         watchlistService.sync();
         recordEvent(USABILITY_EVENT_TYPE.listingOpened, { relatedId: listingId });
+        engagementService?.trackViewed(listingId);
+        renderRecentlyViewed();
 
         documentRef.getElementById('product-details-title').textContent = listing.title;
         activeImages = Array.isArray(listing.images) && listing.images.length
@@ -107,7 +492,7 @@ export function createListingDialogUI({ documentRef = document, state, biddingSe
             thumbnail.loading = 'lazy';
             thumbnail.width = 120;
             thumbnail.height = 120;
-            thumbnail.alt = listing.imageAlt;
+            thumbnail.alt = '';
             button.append(thumbnail);
             return button;
         }));
@@ -194,7 +579,7 @@ export function createListingDialogUI({ documentRef = document, state, biddingSe
                 : remainingTime;
         const latestDispute = disputeService.getLatestForListing(listingId);
         documentRef.getElementById('product-details-auction-status').textContent = listing.secondChanceOffer
-            ? `Second-chance offer ${auctionManagement.offerStatus(listing)} · ${formatCurrency(listing.secondChanceOffer.price)} based on the recipient's last visible bid · Expires ${new Date(listing.secondChanceOffer.expiresAt).toLocaleString()}`
+            ? `Second-chance offer ${auctionManagement.offerStatus(listing)} · ${formatCurrency(listing.secondChanceOffer.price)} based on your last visible bid · Expires ${new Date(listing.secondChanceOffer.expiresAt).toLocaleString()}`
             : listing.listingFormat === LISTING_FORMAT.buyNow && transaction.status === TRANSACTION_STATUS.auctionActive
             ? 'Available at fixed price'
             : transactionStore.isPaused(listingId)
@@ -254,6 +639,8 @@ export function createListingDialogUI({ documentRef = document, state, biddingSe
             biddingService.getBidFeedback(listingId), ...watchlistService.getIndicators(listingId)
         ].filter(Boolean).join(' · ');
         watchlistService.acknowledge(listingId);
+        questionStartedForListing = null;
+        renderEngagement(listing);
         dialogController.open(detailsDialog, returnFocus);
     }
 
@@ -411,7 +798,11 @@ export function createListingDialogUI({ documentRef = document, state, biddingSe
     });
     documentRef.getElementById('cancel-bid').addEventListener('click', () => dialogController.close(bidDialog));
     bidDialog.addEventListener('close', () => { activeBidListingId = null; });
-    documentRef.getElementById('close-product-details').addEventListener('click', () => dialogController.close(detailsDialog));
+    documentRef.getElementById('close-product-details').addEventListener('click', closeProductDetails);
+    detailsDialog.addEventListener('cancel', event => {
+        event.preventDefault();
+        closeProductDetails();
+    });
     documentRef.getElementById('product-details-place-bid').addEventListener('click', () => {
         if (!prepareBidDialog(activeDetailsListingId)) return;
         dialogController.transition(detailsDialog, bidDialog);
@@ -485,7 +876,8 @@ export function createListingDialogUI({ documentRef = document, state, biddingSe
         }
         const isWatching = watchlist.has(activeDetailsListingId);
         if (saved && wasWatching !== isWatching) {
-            recordEvent(isWatching ? USABILITY_EVENT_TYPE.watchlistAdded : USABILITY_EVENT_TYPE.watchlistRemoved, { relatedId: activeDetailsListingId });
+            const eventType = isWatching ? USABILITY_EVENT_TYPE.watchlistAdded : USABILITY_EVENT_TYPE.watchlistRemoved;
+            recordEvent(eventType, { relatedId: activeDetailsListingId });
             announceGlobalStatus(isWatching ? 'Added to Watchlist.' : 'Removed from Watchlist.', documentRef, { allowDialog: true });
         }
         detailWatchButton.textContent = isWatching ? 'Saved' : 'Save';
@@ -502,11 +894,20 @@ export function createListingDialogUI({ documentRef = document, state, biddingSe
 
     return {
         showProductDetails,
+        handleListingLocation,
         openBidDialog,
         setBuyNowHandler(handler) { buyNowHandler = handler; },
         setReportIssueHandler(handler) { reportIssueHandler = handler; },
         setPrimaryActionHandler(handler) { primaryActionHandler = handler; },
         setSellerProfileHandler(handler) { sellerProfileHandler = handler; },
-        focusListingAction
+        focusListingAction,
+        focusQuestions() {
+            const heading = engagementRoot.querySelector('.listing-questions h3');
+            documentRef.defaultView.requestAnimationFrame(() => {
+                if (!heading?.isConnected || !detailsDialog.open) return;
+                heading.focus({ preventScroll: true });
+                heading.scrollIntoView({ block: 'center', behavior: documentRef.defaultView.matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth' });
+            });
+        }
     };
 }

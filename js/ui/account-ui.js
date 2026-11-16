@@ -1,4 +1,4 @@
-import { AVATAR_COLORS, MEETUP_ATTENDANCE_STATUS, PROFILE_CONSTRAINTS, SERVICE_ERROR_CODE } from '../core/constants.js';
+import { AVATAR_COLORS, MEETUP_ATTENDANCE_STATUS, PROFILE_CONSTRAINTS, SERVICE_ERROR_CODE, USABILITY_EVENT_TYPE } from '../core/constants.js';
 import { formatCurrency, formatTimeRemaining } from '../core/formatting.js';
 import { deriveInitials } from '../core/validation.js';
 import { renderTransactionTimeline } from './transaction-timeline-ui.js';
@@ -14,7 +14,7 @@ const HISTORY_FILTERS = [['all', 'All'], ['purchases', 'Purchases'], ['sales', '
 const REVIEW_FILTERS = [['all', 'All'], ['seller', 'As seller'], ['buyer', 'As buyer']];
 const UNAVAILABLE_CAPABILITIES = ['Email verification', 'Phone verification', 'Password', 'Government identification', 'KYC', 'Bank account', 'Payment methods', 'Payout details'];
 
-export function createAccountUI({ documentRef = document, state, activityService, profileService, onAction, onOpenListing, onRecordMeetupAttendance, onReportMeetupNoShow, onResumeBuyer, onProfileChanged }) {
+export function createAccountUI({ documentRef = document, state, activityService, profileService, engagementService, recordEvent = () => {}, onAction, onOpenListing, onRecordMeetupAttendance, onReportMeetupNoShow, onResumeBuyer, onProfileChanged }) {
     const { userService, listingStates } = state;
     const windowRef = documentRef.defaultView;
     const body = documentRef.body;
@@ -210,6 +210,19 @@ export function createAccountUI({ documentRef = document, state, activityService
         renderFiltered(BUYING_FILTERS, ui.buying, Object.fromEntries(Object.entries(sets).map(([id, rows]) => [id, rows.length])), 'buying',
             id => { ui.buying = id; render(); }, 'Buying views', target);
         target.append(list(sets[ui.buying], empty[ui.buying]));
+        const questions = engagementService?.getAskedQuestions(userService.getCurrentUser().id) || [];
+        if (questions.length) {
+            const section = el('section', 'account-question-activity');
+            section.append(el('h3', '', 'Questions you asked'));
+            questions.forEach(question => {
+                const row = el('article', 'account-card');
+                row.append(el('strong', '', question.listing.title), el('p', '', question.question));
+                row.append(el('p', 'activity-item-status', question.answer ? `Seller answered: ${question.answer}` : 'Awaiting seller response'));
+                row.append(button('View listing', 'account-action', () => onOpenListing(question.listingId)));
+                section.append(row);
+            });
+            target.append(section);
+        }
     }
 
     function renderSelling(data, target) {
@@ -220,6 +233,20 @@ export function createAccountUI({ documentRef = document, state, activityService
         renderFiltered(SELLING_FILTERS, ui.selling, Object.fromEntries(Object.entries(sets).map(([id, rows]) => [id, rows.length])), 'selling',
             id => { ui.selling = id; render(); }, 'Selling views', target);
         target.append(list(sets[ui.selling], empty[ui.selling]));
+        if (ui.selling === 'action') {
+            const questions = engagementService?.getNeedsSellerAction(userService.getCurrentUser().id) || [];
+            if (questions.length) {
+                const section = el('section', 'account-question-activity');
+                section.append(el('h3', '', 'Questions awaiting a response'));
+                questions.forEach(question => {
+                    const row = el('article', 'account-card');
+                    row.append(el('strong', '', question.listing.title), el('p', '', question.question));
+                    row.append(button('Open listing questions', 'account-action', () => onOpenListing(question.listingId)));
+                    section.append(row);
+                });
+                target.append(section);
+            }
+        }
     }
 
     function renderWatchlist(data, target) {
@@ -503,6 +530,27 @@ export function createAccountUI({ documentRef = document, state, activityService
             keyPrefix: 'public',
             onReviewFilter: id => { publicUi.reviews = id; renderPublic(); }
         });
+        const moreListings = engagementService?.getSellerListings(publicUi.userId, null, undefined, Number.MAX_SAFE_INTEGER) || [];
+        if (moreListings.length) {
+            const section = el('section', 'public-seller-listings');
+            section.append(el('h3', '', 'More from this seller'));
+            const listRoot = el('div', 'public-seller-listing-list');
+            moreListings.forEach(listing => {
+                const item = el('article', 'account-card');
+                const open = button(listing.title, 'account-listing-title', () => {
+                    recordEvent(USABILITY_EVENT_TYPE.sellerListingOpened, {
+                        relatedId: listing.id,
+                        metadata: { category: listing.category, subcategory: listing.subcategory, source: 'seller_listings' }
+                    });
+                    onOpenListing(listing.id);
+                });
+                const amount = listing.listingFormat === 'buy_now' ? listing.buyNowPrice : listing.currentBid;
+                item.append(open, el('p', 'product-details-meta', `${listing.category} · ${formatCurrency(amount)}`));
+                listRoot.append(item);
+            });
+            section.append(listRoot);
+            target.append(section);
+        }
         const name = profileService.getPublicProfile(publicUi.userId)?.displayName;
         documentRef.getElementById('public-profile-heading').textContent = name ? `${name}'s profile` : 'Seller profile';
     }

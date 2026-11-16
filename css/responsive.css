@@ -365,6 +365,20 @@
         grid-column: 1 / -1;
     }
 
+    .detail-listing-grid {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+
+    .detail-listing-card {
+        grid-template-columns: minmax(0, 1fr);
+    }
+
+    .detail-listing-card img {
+        width: 100%;
+        height: auto;
+        aspect-ratio: 4 / 3;
+    }
+
     button,
     .listing-title-button,
     .prototype-tool-button,
@@ -482,6 +496,19 @@
 @media (max-width: 340px) {
     .container {
         width: calc(100% - 20px);
+    }
+
+    .detail-listing-grid {
+        grid-template-columns: minmax(0, 1fr);
+    }
+
+    .listing-question-actions {
+        align-items: stretch;
+    }
+
+    .listing-question-actions > select,
+    .listing-question-actions > button {
+        width: 100%;
     }
 
     .hero {

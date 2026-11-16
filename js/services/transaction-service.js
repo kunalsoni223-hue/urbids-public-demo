@@ -283,7 +283,7 @@ function createDefaultTransaction() {
     };
 }
 
-function createListingSnapshot(listing) {
+function createListingSnapshot(listing, getListingQuestions = () => []) {
     if (!listing) return null;
     return {
         title: listing.title,
@@ -300,6 +300,15 @@ function createListingSnapshot(listing) {
         listingFormat: listing.listingFormat,
         fulfilmentMethod: listing.fulfilmentMethod,
         accessories: Array.isArray(listing.accessories) ? [...listing.accessories] : [],
+        listingQuestions: getListingQuestions(listing.id)
+            .filter(question => question.answer && question.publicStatus === 'public')
+            .map(question => ({
+                id: question.id,
+                question: question.question,
+                answer: question.answer,
+                answeredAt: question.answeredAt,
+                prototypeSample: question.prototypeSample === true
+            })),
         imageCount: Array.isArray(listing.images) ? listing.images.length : listing.image ? 1 : 0,
         sellerUserId: listing.sellerUserId
     };
@@ -604,6 +613,7 @@ export function createTransactionStore({
     isTransactionPaused = () => false,
     notificationService = null,
     getHighestValidBid,
+    getListingQuestions = () => [],
     now = () => Date.now()
 } = {}) {
     if (typeof getHighestValidBid !== 'function') {
@@ -903,7 +913,7 @@ export function createTransactionStore({
                     winningBid: highestBid && !reserveNotMet ? details.winningBid : null,
                     transactionPrice: highestBid && !reserveNotMet ? details.winningBid : null,
                     winnerResponseDeadline: buyerUserId ? new Date(now() + WINNER_CONFIRMATION_WINDOW_MS).toISOString() : null,
-                    listingSnapshot: buyerUserId ? createListingSnapshot(listingStates.get(listingId)) : null
+                    listingSnapshot: buyerUserId ? createListingSnapshot(listingStates.get(listingId), getListingQuestions) : null
                 };
             } else if (event === TRANSACTION_EVENT.startToken) {
                 next = { ...current, status: nextStatus };
@@ -936,7 +946,7 @@ export function createTransactionStore({
                     winningBid: details.transactionPrice,
                     transactionPrice: details.transactionPrice,
                     winnerResponseDeadline: new Date(now() + WINNER_CONFIRMATION_WINDOW_MS).toISOString(),
-                    listingSnapshot: createListingSnapshot(listing)
+                    listingSnapshot: createListingSnapshot(listing, getListingQuestions)
                 };
             } else if (event === TRANSACTION_EVENT.cancelUnstartedPurchase) {
                 const buyerCancelled = currentUserId === current.buyerUserId;
@@ -994,7 +1004,7 @@ export function createTransactionStore({
                     buyerUserId: details.buyerUserId,
                     sellerUserId: listingStates.get(listingId)?.sellerUserId || current.sellerUserId,
                     transactionPrice: details.transactionPrice,
-                    listingSnapshot: createListingSnapshot(listingStates.get(listingId))
+                    listingSnapshot: createListingSnapshot(listingStates.get(listingId), getListingQuestions)
                 };
             } else if (event === TRANSACTION_EVENT.meetupNoShow) {
                 const sellerNoShow = details.missedUserId === current.sellerUserId;

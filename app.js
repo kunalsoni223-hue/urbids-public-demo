@@ -24,6 +24,7 @@ import { createPublicInfoUI } from './js/ui/public-info-ui.js';
 import { createPublicFeedbackUI } from './js/ui/public-feedback-ui.js';
 import { createAuctionManagementService } from './js/services/auction-management-service.js';
 import { createWatchlistService } from './js/services/watchlist-service.js';
+import { createListingEngagementService } from './js/services/listing-engagement-service.js';
 import { createAuctionManagementUI } from './js/ui/auction-management-ui.js';
 import { announceGlobalStatus } from './js/ui/status-announcer.js';
 
@@ -54,12 +55,14 @@ const userService = createUserService(listingStates);
 let notificationUI;
 const notificationService = createNotificationService({ onChange: () => notificationUI?.render() });
 const { initialBidState, auctionExtensionCounts } = restoreBids(listingStates);
+let listingEngagementService;
 let disputeService;
 const transactionStore = createTransactionStore({
     listingStates,
     getCurrentUser: userService.getCurrentUser,
     isTransactionPaused: listingId => disputeService?.hasOpenDispute(listingId) || false,
     notificationService,
+    getListingQuestions: listingId => listingEngagementService?.getQuestions(listingId).filter(question => question.answer) || [],
     getHighestValidBid
 });
 disputeService = createDisputeService({ listingStates, transactionStore, userService, notificationService });
@@ -69,6 +72,9 @@ const biddingService = createBiddingService(listingStates, transactionStore, use
 biddingService.closeAuctionsAtBuyNow();
 const auctionManagement = createAuctionManagementService({ listingStates, transactionStore, biddingService, userService, notificationService, photoManager: sellerPhotoManager });
 const watchlistService = createWatchlistService({ listingStates, userService, transactionStore, notificationService, auctionManagement });
+listingEngagementService = createListingEngagementService({
+    listingStates, userService, transactionStore, notificationService, submissions
+});
 const activityService = createActivityService({ listingStates, transactionStore, userService, disputeService, ratingService, biddingService, auctionManagement, watchlistService, notificationService });
 const profileService = createProfileService({ listingStates, transactionStore, userService, ratingService, disputeService, biddingService, auctionManagement });
 const recordEvent = () => {};
@@ -85,6 +91,7 @@ marketplaceUI = createMarketplaceUI({
     activityService,
     auctionManagement,
     watchlistService,
+    engagementService: listingEngagementService,
     recordEvent,
     disputeService,
 });
@@ -96,9 +103,11 @@ const listingDialogUI = createListingDialogUI({
     activityService,
     auctionManagement,
     watchlistService,
+    engagementService: listingEngagementService,
     recordEvent,
     dialogController,
-    renderListings: () => marketplaceUI.renderListings()
+    renderListings: () => marketplaceUI.renderListings(),
+    renderRecentlyViewed: () => marketplaceUI?.renderRecentlyViewed()
 });
 
 notificationUI = createNotificationUI({
@@ -108,7 +117,10 @@ notificationUI = createNotificationUI({
     activityService,
     dialogController,
     onNavigate: notification => {
-        if (listingStates.has(notification.listingId)) listingDialogUI.showProductDetails(notification.listingId);
+        if (listingStates.has(notification.listingId)) {
+            listingDialogUI.showProductDetails(notification.listingId);
+            if (notification.type === 'listing_question') listingDialogUI.focusQuestions();
+        }
         else documentRef.getElementById('sell').scrollIntoView({
             behavior: documentRef.defaultView.matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth'
         });
@@ -212,6 +224,8 @@ accountUI = createAccountUI({
     state,
     activityService,
     profileService,
+    engagementService: listingEngagementService,
+    recordEvent,
     onAction: (listingId, row) => performPrimaryAction(listingId, { action: row.action }),
     onOpenListing: listingDialogUI.showProductDetails,
     onResumeBuyer: transactionUI.resumeTransaction,
@@ -250,3 +264,4 @@ createPublicInfoUI({ documentRef, dialogController, openFeedback: feedbackUI.ope
 marketplaceUI.renderListings();
 sellerUI.renderSubmissions();
 accountUI.openFromLocation();
+listingDialogUI.handleListingLocation();

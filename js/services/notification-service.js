@@ -15,7 +15,8 @@ const notificationPriority = new Map([
     [NOTIFICATION_TYPE.disputeResolved, 6],
     [NOTIFICATION_TYPE.ratingReceived, 7],
     [NOTIFICATION_TYPE.listingPublished, 8],
-    [NOTIFICATION_TYPE.listingRejected, 9]
+    [NOTIFICATION_TYPE.listingRejected, 9],
+    [NOTIFICATION_TYPE.listingQuestion, 10]
 ]);
 
 function isValidNotification(notification) {

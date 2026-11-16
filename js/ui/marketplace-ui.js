@@ -89,7 +89,7 @@ function createButton(documentRef, label, className, action) {
     return button;
 }
 
-export function createMarketplaceUI({ documentRef = document, state, biddingService, activityService, auctionManagement, watchlistService, recordEvent = () => {}, onPublicCountChanged = () => {} }) {
+export function createMarketplaceUI({ documentRef = document, state, biddingService, activityService, auctionManagement, watchlistService, engagementService, recordEvent = () => {}, onPublicCountChanged = () => {} }) {
     const listingContainer = documentRef.getElementById('listing-container');
     const publicListingCount = documentRef.getElementById('public-listing-count');
     const filteredListingCount = documentRef.getElementById('filtered-listing-count');
@@ -124,6 +124,15 @@ export function createMarketplaceUI({ documentRef = document, state, biddingServ
     let activeSubcategory = null;
     let actions = {};
     let lastIntelligenceSync = 0;
+    const recentlyViewedSection = documentRef.createElement('section');
+    recentlyViewedSection.className = 'recently-viewed-section';
+    recentlyViewedSection.hidden = true;
+    const recentlyViewedTitle = documentRef.createElement('h2');
+    recentlyViewedTitle.textContent = 'Recently viewed';
+    const recentlyViewedContainer = documentRef.createElement('div');
+    recentlyViewedContainer.className = 'listings recently-viewed-listings';
+    recentlyViewedSection.append(recentlyViewedTitle, recentlyViewedContainer);
+    listingContainer.after(recentlyViewedSection);
 
     const categoryFilters = documentRef.querySelector('.category-nav-list');
     const categoryNavigation = [
@@ -558,7 +567,37 @@ export function createMarketplaceUI({ documentRef = document, state, biddingServ
         onPublicCountChanged(sortedListings.length);
         applyFilters();
         updateCountdowns();
+        renderRecentlyViewed();
     }
+
+    function renderRecentlyViewed() {
+        const listings = engagementService?.getRecentlyViewed() || [];
+        recentlyViewedSection.hidden = listings.length === 0;
+        recentlyViewedContainer.replaceChildren(...listings.map(listing => {
+            const card = createListingCard(listing);
+            card.classList.add('recently-viewed-card');
+            card.querySelector('.listing-actions')?.remove();
+            card.querySelector('.prototype-tools')?.remove();
+            card.querySelector('.card-watch-button')?.remove();
+            return card;
+        }));
+    }
+
+    function openRecentlyViewedCard(event) {
+        const card = event.target.closest('.recently-viewed-card');
+        if (!card) return;
+        const listingId = card.dataset.listingId;
+        if (!listingStates.has(listingId)) return;
+        recordEvent(USABILITY_EVENT_TYPE.recentlyViewedOpened, { relatedId: listingId, metadata: { source: 'recently_viewed' } });
+        actions.openDetails?.(listingId);
+    }
+
+    recentlyViewedContainer.addEventListener('click', openRecentlyViewedCard);
+    recentlyViewedContainer.addEventListener('keydown', event => {
+        if (!['Enter', ' '].includes(event.key) || event.target.closest('button')) return;
+        event.preventDefault();
+        openRecentlyViewedCard(event);
+    });
 
     function bindEvents() {
         categoryFilters.addEventListener('click', event => {
@@ -733,6 +772,7 @@ export function createMarketplaceUI({ documentRef = document, state, biddingServ
 
     return {
         renderListings,
+        renderRecentlyViewed,
         focusAction,
         setActionHandlers(nextActions) {
             actions = nextActions;
