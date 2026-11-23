@@ -1,7 +1,6 @@
 import { DISPUTE_RESOLUTION_LABELS, NOTIFICATION_TYPE, STORAGE_KEYS, SUBMISSION_STATUS, TRANSACTION_EVENT } from '../core/constants.js';
 import { readArray, removeStoredValue, writeJSON } from '../core/storage.js';
-import { isDemoUserId } from '../data/demo-users.js';
-import { isStableId, normalizeTimestamp, uniqueRecords } from '../core/normalization.js';
+import { isPrototypeUserId, isStableId, normalizeTimestamp, uniqueRecords } from '../core/normalization.js';
 
 const validNotificationTypes = new Set(Object.values(NOTIFICATION_TYPE));
 const notificationPriority = new Map([
@@ -25,7 +24,7 @@ function isValidNotification(notification) {
         && !Array.isArray(notification)
         && typeof notification.id === 'string'
         && typeof notification.dedupeKey === 'string'
-        && isDemoUserId(notification.recipientUserId)
+        && isPrototypeUserId(notification.recipientUserId)
         && typeof notification.title === 'string'
         && typeof notification.message === 'string'
         && normalizeTimestamp(notification.createdAt);
@@ -63,7 +62,7 @@ export function createNotificationService({ now = () => new Date(), random = Mat
     return {
         create({ dedupeKey, recipientUserId, title, message, listingId = null, type = NOTIFICATION_TYPE.generic } = {}) {
             if (typeof dedupeKey !== 'string' || !dedupeKey.trim()
-                || !isDemoUserId(recipientUserId)
+                || !isPrototypeUserId(recipientUserId)
                 || typeof title !== 'string' || !title.trim()
                 || typeof message !== 'string' || !message.trim()
                 || !validNotificationTypes.has(type)) return null;
@@ -181,7 +180,7 @@ export function createNotificationService({ now = () => new Date(), random = Mat
         },
         notifyDisputeOpened(dispute, listingTitle) {
             if (!dispute) return [];
-            return [dispute.buyerUserId, dispute.sellerUserId].filter(isDemoUserId).map(recipientUserId => this.create({
+            return [dispute.buyerUserId, dispute.sellerUserId].filter(isPrototypeUserId).map(recipientUserId => this.create({
                 dedupeKey: `dispute-opened:${dispute.id}:${recipientUserId}`,
                 recipientUserId,
                 type: NOTIFICATION_TYPE.disputeOpened,
@@ -193,7 +192,7 @@ export function createNotificationService({ now = () => new Date(), random = Mat
         notifyDisputeResolved(dispute, listingTitle) {
             if (!dispute) return [];
             const resolution = DISPUTE_RESOLUTION_LABELS[dispute.resolution] || 'No action';
-            return [dispute.buyerUserId, dispute.sellerUserId].filter(isDemoUserId).map(recipientUserId => this.create({
+            return [dispute.buyerUserId, dispute.sellerUserId].filter(isPrototypeUserId).map(recipientUserId => this.create({
                 dedupeKey: `dispute-resolved:${dispute.id}:${recipientUserId}`,
                 recipientUserId,
                 type: NOTIFICATION_TYPE.disputeResolved,
@@ -203,7 +202,7 @@ export function createNotificationService({ now = () => new Date(), random = Mat
             })).filter(Boolean);
         },
         notifyRatingReceived(rating, listingTitle) {
-            if (!rating?.id || !isDemoUserId(rating.reviewedUserId) || !rating.listingId) return null;
+            if (!rating?.id || !isPrototypeUserId(rating.reviewedUserId) || !rating.listingId) return null;
             return this.create({
                 dedupeKey: `rating-received:${rating.id}`,
                 recipientUserId: rating.reviewedUserId,
@@ -239,7 +238,7 @@ export function createNotificationService({ now = () => new Date(), random = Mat
             return notifications.filter(item => item.recipientUserId === userId && !item.readAt).length;
         },
         removeForUser(userId) {
-            if (!isDemoUserId(userId)) return false;
+            if (!isPrototypeUserId(userId)) return false;
             return removeMatching(item => item.recipientUserId === userId);
         },
         removeForListing(listingId) {
@@ -255,7 +254,7 @@ export function createNotificationService({ now = () => new Date(), random = Mat
             return true;
         },
         markAllRead(userId) {
-            if (!isDemoUserId(userId)) return false;
+            if (!isPrototypeUserId(userId)) return false;
             const readAt = now().toISOString();
             const next = notifications.map(item => item.recipientUserId === userId && !item.readAt ? { ...item, readAt } : item);
             if (!persist(next)) return false;

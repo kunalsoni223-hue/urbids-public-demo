@@ -1,6 +1,6 @@
 import { DISPUTE_REASON, DISPUTE_RESOLUTION, DISPUTE_STATUS, STORAGE_KEYS, TRANSACTION_STATUS } from '../core/constants.js';
 import { readArray, writeJSON } from '../core/storage.js';
-import { isDemoUserId } from '../data/demo-users.js';
+import { isPrototypeUserId } from '../core/normalization.js';
 import { isStableId, normalizeTimestamp, uniqueRecords } from '../core/normalization.js';
 
 const validReasons = new Set(Object.values(DISPUTE_REASON));
@@ -13,9 +13,9 @@ export function createDisputeService({ listingStates, transactionStore, userServ
         && !Array.isArray(dispute)
         && typeof dispute.id === 'string'
         && isStableId(dispute.listingId)
-        && isDemoUserId(dispute.buyerUserId)
-        && isDemoUserId(dispute.sellerUserId)
-        && isDemoUserId(dispute.reportingUserId)
+        && isPrototypeUserId(dispute.buyerUserId)
+        && isPrototypeUserId(dispute.sellerUserId)
+        && isPrototypeUserId(dispute.reportingUserId)
         && dispute.buyerUserId !== dispute.sellerUserId
         && [dispute.buyerUserId, dispute.sellerUserId].includes(dispute.reportingUserId)
         && validReasons.has(dispute.reason)
@@ -80,7 +80,7 @@ export function createDisputeService({ listingStates, transactionStore, userServ
             return disputes.filter(dispute => dispute.buyerUserId === userId || dispute.sellerUserId === userId);
         },
         removeForUser(userId) {
-            if (!isDemoUserId(userId)) return false;
+            if (!isPrototypeUserId(userId)) return false;
             return removeMatching(dispute => dispute.buyerUserId === userId || dispute.sellerUserId === userId);
         },
         removeForListing(listingId) {

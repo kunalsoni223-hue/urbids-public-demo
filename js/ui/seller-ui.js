@@ -1,9 +1,33 @@
 import { config } from '../config.js';
-import { AUCTION_DURATION_OPTIONS_HOURS, CATEGORY, CATEGORY_LABELS, CONDITION_GRADE_GUIDANCE, CONDITION_GRADE_LABELS, DEFAULT_AUCTION_DURATION_HOURS, DEFAULT_FULFILMENT_METHOD, FULFILMENT_METHOD_LABELS, REJECTION_REASON_LABELS, RESERVE_PRICE_MODE, SERVICE_ERROR_CODE, SPECIFICATION_FIELDS_BY_SUBCATEGORY, SPECIFICATION_FIELD_LABELS, SUBCATEGORIES_BY_CATEGORY, SUBCATEGORY_LABELS, SUBMISSION_STATUS, SUBMISSION_STATUS_LABELS, USABILITY_EVENT_TYPE } from '../core/constants.js';
+import { AUCTION_DURATION_OPTIONS_HOURS, CATEGORY, CATEGORY_LABELS, CONDITION_GRADE, CONDITION_GRADE_GUIDANCE, CONDITION_GRADE_LABELS, DEFAULT_AUCTION_DURATION_HOURS, DEFAULT_FULFILMENT_METHOD, FULFILMENT_METHOD_LABELS, LISTING_FORMAT, MUMBAI_LOCALITIES, PROTOTYPE_MODE, REJECTION_REASON_LABELS, RESERVE_PRICE_MODE, SERVICE_ERROR_CODE, SPECIFICATION_FIELDS_BY_SUBCATEGORY, SPECIFICATION_FIELD_LABELS, SUBCATEGORIES_BY_CATEGORY, SUBCATEGORY_LABELS, SUBMISSION_STATUS, SUBMISSION_STATUS_LABELS, USABILITY_EVENT_TYPE } from '../core/constants.js';
 import { formatCurrency } from '../core/formatting.js';
 import { isRenderableSellerSubmission, validateSellerPhotos } from '../core/validation.js';
 import { getSellerPriceGuidance } from '../services/listing-service.js';
-import { createSellerSubmission, loadSellerSubmissions } from '../services/submission-service.js';
+import { createSellerSubmission, deleteSellerDraft, loadSellerDraft, loadSellerSubmissions, saveSellerDraft } from '../services/submission-service.js';
+import { announceGlobalStatus } from './status-announcer.js';
+
+const sellerConditionChoices = [
+    [CONDITION_GRADE.likeNew, 'Like new', 'Minimal or no visible wear.'],
+    [CONDITION_GRADE.excellent, 'Excellent', 'Light signs of use; fully functional.'],
+    [CONDITION_GRADE.good, 'Good', 'Visible normal wear; fully functional.'],
+    [CONDITION_GRADE.fair, 'Fair', 'Clear wear or disclosed issues.'],
+    ['defective', 'Defective', 'Known functional problem or incomplete functionality.']
+];
+
+const photoPurposes = {
+    [CATEGORY.electronics]: ['Main photo', 'Front', 'Back', 'Sides', 'Screen/display', 'Defects', 'Accessories', 'Serial/model label'],
+    [CATEGORY.furniture]: ['Main photo', 'Full view', 'Side view', 'Surface/material', 'Wear/damage', 'Dimensions/context', 'Collection/access context'],
+    [CATEGORY.homeAppliances]: ['Main photo', 'Front', 'Controls', 'Interior/capacity', 'Accessories', 'Model label', 'Defects', 'Operational context'],
+    [CATEGORY.fashion]: ['Main photo', 'Front', 'Back', 'Label/size', 'Material/details', 'Wear', 'Packaging/accessories'],
+    [CATEGORY.books]: ['Main photo', 'Front/cover', 'Back', 'Spine', 'Edition/details', 'Markings/damage', 'Completeness']
+};
+
+const sellerSubcategoryLabels = {
+    [CATEGORY.electronics]: { wearables: 'Smartwatches / wearables', audio: 'Audio', other_electronics: 'Other electronics' },
+    [CATEGORY.homeAppliances]: { coffee_machines: 'Coffee machines', kitchen_appliances: 'Kitchen appliances', cleaning_appliances: 'Cleaning appliances', air_treatment: 'Air treatment', small_appliances: 'Small appliances' },
+    [CATEGORY.books]: { books: 'Books', box_sets: 'Box sets', collectibles: 'Collectibles' },
+    [CATEGORY.fashion]: { accessories: 'Watches / accessories', fashion: 'Other fashion' }
+};
 
 export function createSellerPhotoManager({ documentRef = document, URLRef = URL }) {
     const filesBySubmission = new Map();
@@ -17,20 +41,20 @@ export function createSellerPhotoManager({ documentRef = document, URLRef = URL 
         if (clearSelection) fileInput.value = '';
     }
 
-    function showPreviews(fileInput, previewContainer, errorElement) {
+    function showPreviews(fileInput, previewContainer, errorElement, purpose = 'Product photo') {
         const files = Array.from(fileInput.files);
         clearPreviews(fileInput, previewContainer, false);
         errorElement.textContent = '';
         const validation = validateSellerPhotos(files);
         if (!validation.valid) {
             errorElement.textContent = validation.reason === 'too_many'
-                ? 'Choose no more than five photos.'
+                ? 'Choose no more than ten photos.'
                 : 'Choose image files only.';
             fileInput.value = '';
             return;
         }
 
-        files.forEach(file => {
+        files.forEach((file, index) => {
             const imageUrl = URLRef.createObjectURL(file);
             previewUrls.push(imageUrl);
             const preview = documentRef.createElement('figure');
@@ -39,8 +63,15 @@ export function createSellerPhotoManager({ documentRef = document, URLRef = URL 
             image.src = imageUrl;
             image.alt = '';
             const caption = documentRef.createElement('figcaption');
-            caption.textContent = file.name;
-            preview.append(image, caption);
+            caption.textContent = `${purpose}: ${file.name}`;
+            const mainLabel = documentRef.createElement('label');
+            const mainChoice = documentRef.createElement('input');
+            mainChoice.type = 'radio';
+            mainChoice.name = 'seller-main-photo';
+            mainChoice.value = String(index);
+            mainChoice.checked = index === 0;
+            mainLabel.append(mainChoice, documentRef.createTextNode(' Main photo'));
+            preview.append(image, caption, mainLabel);
             previewContainer.append(preview);
         });
     }
@@ -79,7 +110,7 @@ export function createSellerPhotoManager({ documentRef = document, URLRef = URL 
     };
 }
 
-export function createSellerUI({ documentRef = document, dialogController, photoManager, userService, recordEvent = () => {}, onSubmissionsChanged = () => {} }) {
+export function createSellerUI({ documentRef = document, dialogController, photoManager, userService, getPrototypeMode = () => PROTOTYPE_MODE.development, getActiveScenarioId = () => null, recordEvent = () => {}, onSubmissionsChanged = () => {}, onPreviewListing = () => {}, onDisableAutoRelist = () => {} }) {
     const dialog = documentRef.getElementById('seller-listing-dialog');
     const form = documentRef.getElementById('seller-listing-form');
     const errorElement = documentRef.getElementById('seller-listing-error');
@@ -90,8 +121,11 @@ export function createSellerUI({ documentRef = document, dialogController, photo
     const startButton = documentRef.getElementById('start-listing-button');
     const categorySelect = documentRef.getElementById('seller-category');
     const subcategorySelect = documentRef.getElementById('seller-subcategory');
+    const photoPurposeSelect = documentRef.getElementById('seller-photo-purpose');
+    const photoGuidance = documentRef.getElementById('seller-photo-guidance');
     const conditionSelect = documentRef.getElementById('seller-condition');
     const fulfilmentSelect = documentRef.getElementById('seller-fulfilment-method');
+    const locationSelect = documentRef.getElementById('seller-location');
     const durationSelect = documentRef.getElementById('seller-auction-duration');
     const formatSelect = documentRef.getElementById('seller-listing-format');
     const incrementSelect = documentRef.getElementById('seller-bid-increment');
@@ -102,13 +136,17 @@ export function createSellerUI({ documentRef = document, dialogController, photo
         option.defaultSelected = amount === 100;
         return option;
     }));
+    const reserveModeSelect = documentRef.getElementById('seller-reserve-mode');
+    const reservePriceInput = documentRef.getElementById('seller-reserve-price');
+    const reservePriceWrap = documentRef.getElementById('seller-reserve-price-wrap');
     const priceGuidance = documentRef.getElementById('seller-price-guidance');
     const conditionGuidance = documentRef.getElementById('seller-condition-guidance');
     const maximumListingPrice = String(config.auctionRules.maximumListingPrice);
-    ['seller-starting-bid', 'seller-buy-now', 'seller-estimated-value'].forEach(id => {
+    ['seller-starting-bid', 'seller-buy-now', 'seller-reserve-price', 'seller-estimated-value'].forEach(id => {
         documentRef.getElementById(id).max = maximumListingPrice;
     });
     const specificationFields = documentRef.getElementById('seller-specification-fields');
+    const sectionDetails = Array.from(form.querySelectorAll('[data-seller-section]'));
     const reviewSummary = {
         title: documentRef.getElementById('seller-summary-title'),
         brand: documentRef.getElementById('seller-summary-brand'),
@@ -121,21 +159,32 @@ export function createSellerUI({ documentRef = document, dialogController, photo
         startingBid: documentRef.getElementById('seller-summary-starting-bid'),
         buyNow: documentRef.getElementById('seller-summary-buy-now'),
         duration: documentRef.getElementById('seller-summary-duration'),
+        reserve: documentRef.getElementById('seller-summary-reserve'),
         format: documentRef.getElementById('seller-summary-format')
     };
+    let accountGate = () => true;
 
-    const inPilotMode = () => true;
+    const inPilotMode = () => getPrototypeMode() === PROTOTYPE_MODE.usabilityTest;
     function updateCategoryOptions() {
-        categorySelect.replaceChildren(...Object.entries(CATEGORY_LABELS).map(([value, label]) => new Option(label, value)));
+        const categoryLabels = {
+            [CATEGORY.electronics]: 'Electronics', [CATEGORY.furniture]: 'Furniture',
+            [CATEGORY.homeAppliances]: 'Home', [CATEGORY.fashion]: 'Fashion', [CATEGORY.books]: 'Books & Collectibles'
+        };
+        categorySelect.replaceChildren(...Object.entries(categoryLabels).map(([value, label]) => new Option(label, value)));
         categorySelect.value = CATEGORY.electronics;
     }
     updateCategoryOptions();
-    conditionSelect.replaceChildren(...Object.entries(CONDITION_GRADE_LABELS).map(([value, label]) => new Option(`${value} - ${label}`, value)));
+    conditionSelect.replaceChildren(new Option('Choose a condition', ''), ...sellerConditionChoices.map(([value, label]) => new Option(label, value)));
     fulfilmentSelect.replaceChildren(...Object.entries(FULFILMENT_METHOD_LABELS).map(([value, label]) => new Option(label, value)));
-    durationSelect.replaceChildren(...AUCTION_DURATION_OPTIONS_HOURS.map(hours => new Option(`${hours} hours`, String(hours))));
+    locationSelect.replaceChildren(new Option('Mumbai (city only)', config.pilotCity), ...MUMBAI_LOCALITIES.map(locality => new Option(locality, locality)));
+    durationSelect.replaceChildren(...AUCTION_DURATION_OPTIONS_HOURS.map(hours => {
+        const days = hours / 24;
+        return new Option(`${days} days${days === 7 ? ' - Recommended' : ''}`, String(hours));
+    }));
 
     function renderSpecificationFields() {
-        const fieldNames = SPECIFICATION_FIELDS_BY_SUBCATEGORY[subcategorySelect.value] || [];
+        const fieldNames = (SPECIFICATION_FIELDS_BY_SUBCATEGORY[subcategorySelect.value] || [])
+            .filter(key => !['knownDefects', 'includedAccessories'].includes(key));
         specificationFields.replaceChildren(...fieldNames.map(key => {
             const wrapper = documentRef.createElement('label');
             wrapper.className = 'seller-specification-field';
@@ -176,9 +225,25 @@ export function createSellerUI({ documentRef = document, dialogController, photo
         const subcategories = allSubcategories;
         subcategorySelect.replaceChildren(
             new Option('Choose a subcategory', ''),
-            ...subcategories.map(value => new Option(SUBCATEGORY_LABELS[value], value))
+            ...subcategories.map(value => new Option(sellerSubcategoryLabels[categorySelect.value]?.[value] || SUBCATEGORY_LABELS[value], value))
         );
         subcategorySelect.value = '';
+        const suggestions = photoPurposes[categorySelect.value] || ['Main photo', 'Front', 'Back', 'Details', 'Wear/damage'];
+        photoPurposeSelect.replaceChildren(...suggestions.map(value => new Option(value, value)));
+        photoGuidance.replaceChildren(...suggestions.map(value => {
+            const item = documentRef.createElement('span');
+            item.textContent = value;
+            return item;
+        }));
+        documentRef.getElementById('seller-proof-help').hidden = categorySelect.value !== CATEGORY.electronics;
+        documentRef.getElementById('seller-activation-help').hidden = !['smartphones', 'laptops', 'wearables'].includes(subcategorySelect.value);
+        const fulfilmentRecommendation = categorySelect.value === CATEGORY.furniture
+            ? 'Large furniture: public collection is recommended.'
+            : categorySelect.value === CATEGORY.electronics && ['smartphones', 'laptops', 'wearables', 'audio'].includes(subcategorySelect.value)
+                ? 'For higher-risk electronics, meet and inspect is recommended.'
+                : categorySelect.value === CATEGORY.books || ['small_appliances', 'accessories'].includes(subcategorySelect.value)
+                    ? 'For small goods, collection or prototype shipping may be suitable.' : '';
+        documentRef.getElementById('seller-fulfilment-recommendation').textContent = fulfilmentRecommendation;
         renderSpecificationFields();
     }
 
@@ -194,10 +259,11 @@ export function createSellerUI({ documentRef = document, dialogController, photo
         const buyNowValue = values.get('buyNowPrice');
         const category = CATEGORY_LABELS[values.get('category')] || 'Not selected';
         const subcategory = SUBCATEGORY_LABELS[values.get('subcategory')] || 'Choose a subcategory';
-        const condition = CONDITION_GRADE_LABELS[values.get('condition')];
-        conditionGuidance.textContent = condition
-            ? `${condition}: ${CONDITION_GRADE_GUIDANCE[values.get('condition')]}. Grades are seller-reported.`
-            : 'Condition grades are seller-reported; describe defects and wear clearly.';
+        const chosenCondition = sellerConditionChoices.find(([value]) => value === values.get('condition'));
+        const condition = chosenCondition?.[1] || '';
+        conditionGuidance.textContent = chosenCondition
+            ? `${chosenCondition[2]} Condition is seller-declared, not Urbids-verified.`
+            : 'Condition is seller-declared, not Urbids-verified.';
         const fulfilment = FULFILMENT_METHOD_LABELS[values.get('fulfilmentMethod')] || FULFILMENT_METHOD_LABELS[DEFAULT_FULFILMENT_METHOD];
         const specifications = Array.from(specificationFields.querySelectorAll('[data-specification]'))
             .filter(input => input.value.trim())
@@ -212,10 +278,10 @@ export function createSellerUI({ documentRef = document, dialogController, photo
             ? `${description.slice(0, 140)}${description.length > 140 ? '…' : ''}`
             : 'Not entered';
         reviewSummary.photos.textContent = photoInput.files.length
-            ? `${photoInput.files.length} selected`
-            : 'None selected';
+            ? `${photoInput.files.length} selected${photoPreviews.querySelector('input[name="seller-main-photo"]:checked') ? ', main photo selected' : ''}`
+            : 'Main photo required';
         reviewSummary.location.textContent = String(values.get('location') || '').trim() || 'Not entered';
-        reviewSummary.fulfilment.textContent = fulfilment;
+        reviewSummary.fulfilment.textContent = `${fulfilment}${documentRef.getElementById('seller-meet-inspect').checked ? ' · Public meet and inspect' : ''}`;
         reviewSummary.specifications.textContent = specifications.length ? specifications.slice(0, 3).join(' · ') : 'None added';
         reviewSummary.startingBid.textContent = String(values.get('listingFormat')) === 'buy_now'
             ? 'Not used'
@@ -226,12 +292,15 @@ export function createSellerUI({ documentRef = document, dialogController, photo
             ? formatCurrency(Number(buyNowValue))
             : 'Not set';
         documentRef.getElementById('seller-summary-bid-increment').textContent = formatCurrency(Number(values.get('bidIncrement')));
-        reviewSummary.duration.textContent = `${Number(values.get('auctionDurationHours')) || DEFAULT_AUCTION_DURATION_HOURS} hours`;
+        reviewSummary.duration.textContent = `${(Number(values.get('auctionDurationHours')) || DEFAULT_AUCTION_DURATION_HOURS) / 24} days`;
         reviewSummary.format.textContent = {
             auction: 'Auction',
             buy_now: 'Buy Now',
             auction_buy_now: 'Auction + Buy Now'
         }[String(values.get('listingFormat'))] || 'Auction';
+        reviewSummary.reserve.textContent = values.get('reservePriceMode') === RESERVE_PRICE_MODE.set && values.get('reservePrice')
+            ? formatCurrency(Number(values.get('reservePrice')))
+            : 'None';
         const estimateSummary = documentRef.getElementById('seller-summary-estimated-value');
         if (estimateSummary) estimateSummary.textContent = Number.isSafeInteger(estimatedValue) && estimatedValue > 0
             ? formatCurrency(estimatedValue) : 'Not entered';
@@ -241,9 +310,116 @@ export function createSellerUI({ documentRef = document, dialogController, photo
             startingBid: Number(values.get('startingBid')),
             buyNowPrice: buyNowValue ? Number(buyNowValue) : null
         });
-        priceGuidance.textContent = guidance.low === null
-            ? guidance.warning
-            : `Sample range ${formatCurrency(guidance.low)} to ${formatCurrency(guidance.high)} from ${guidance.sampleCount} listing${guidance.sampleCount === 1 ? '' : 's'}${guidance.conditionMatched ? ' in this condition.' : ' in this subcategory.'}${guidance.warning ? ` ${guidance.warning}` : ''}`;
+        priceGuidance.textContent = guidance.low === null || guidance.sampleCount < 2
+            ? `Prototype price guidance: ${guidance.warning}`
+            : `Prototype price guidance: sample range ${formatCurrency(guidance.low)} to ${formatCurrency(guidance.high)} from ${guidance.sampleCount} listing${guidance.sampleCount === 1 ? '' : 's'}${guidance.conditionMatched ? ' in this condition.' : ' in this subcategory.'}${guidance.warning ? ` ${guidance.warning}` : ''}`;
+        const startingPrice = Number(values.get('startingBid'));
+        const buyNowPrice = Number(values.get('buyNowPrice'));
+        const startingShare = Number.isSafeInteger(startingPrice) && startingPrice > 0
+            && Number.isSafeInteger(buyNowPrice) && buyNowPrice > 0
+            && String(values.get('listingFormat')) !== LISTING_FORMAT.buyNow
+            ? ` Starting bid is ${Math.round(startingPrice / buyNowPrice * 100)}% of Buy Now.` : '';
+        if (startingShare) priceGuidance.textContent += startingShare;
+        if (startingShare && startingPrice >= buyNowPrice) priceGuidance.textContent += ' Starting price must be below Buy Now.';
+        if ([startingPrice, buyNowPrice].some(price => Number.isFinite(price) && price > config.auctionRules.maximumListingPrice)) {
+            priceGuidance.textContent += ` Prices cannot exceed ${formatCurrency(config.auctionRules.maximumListingPrice)}.`;
+        }
+        const incrementRecommendation = startingPrice < 5000 ? 'Suggested increment: ₹10 or ₹100.'
+            : startingPrice <= 25000 ? 'Suggested increment: ₹100.' : 'Suggested increment: ₹1,000.';
+        documentRef.getElementById('seller-increment-recommendation').textContent = Number.isFinite(startingPrice) && startingPrice > 0
+            ? incrementRecommendation : '';
+        const defectsConfirmed = documentRef.getElementById('seller-defects-confirmed').checked
+            && (values.get('condition') !== 'defective' || String(values.get('knownDefects') || '').trim().length > 0);
+        const categoryNeedsBrand = values.get('category') === CATEGORY.electronics || values.get('category') === CATEGORY.homeAppliances
+            || (values.get('category') === CATEGORY.fashion && ['sneakers', 'bags', 'accessories'].includes(String(values.get('subcategory'))));
+        const photoSelected = photoInput.files.length > 0 && Boolean(photoPreviews.querySelector('input[name="seller-main-photo"]:checked'));
+        const buyNowOnly = values.get('listingFormat') === LISTING_FORMAT.buyNow;
+        const startingValid = buyNowOnly || (Number.isSafeInteger(startingPrice) && startingPrice > 0);
+        const buyNowValid = ![LISTING_FORMAT.buyNow, LISTING_FORMAT.auctionAndBuyNow].includes(values.get('listingFormat'))
+            || (Number.isSafeInteger(buyNowPrice) && buyNowPrice > (buyNowOnly ? 0 : startingPrice));
+        const checklist = {
+            product: Boolean(title && values.get('category') && values.get('subcategory') && (!categoryNeedsBrand || brand)),
+            photo: photoSelected,
+            condition: Boolean(values.get('condition')),
+            defects: defectsConfirmed,
+            details: Array.from(specificationFields.querySelectorAll('[required]')).every(field => String(field.value).trim()),
+            format: Object.values(LISTING_FORMAT).includes(values.get('listingFormat')),
+            pricing: startingValid && buyNowValid && (!startingPrice || startingPrice <= config.auctionRules.maximumListingPrice)
+                && (!buyNowPrice || buyNowPrice <= config.auctionRules.maximumListingPrice),
+            duration: buyNowOnly || Boolean(values.get('auctionDurationHours')),
+            fulfilment: Boolean(values.get('fulfilmentMethod')),
+            acknowledgement: documentRef.getElementById('seller-acknowledgement').checked
+        };
+        Object.entries(checklist).forEach(([key, complete]) => {
+            const item = documentRef.querySelector(`[data-check="${key}"]`);
+            item.dataset.complete = String(complete);
+            item.setAttribute('aria-label', `${item.textContent.trim()}, ${complete ? 'complete' : 'incomplete'}`);
+        });
+    }
+
+    function updateCharacterCounts() {
+        [['seller-item-title', 'seller-title-count', 60], ['seller-description', 'seller-description-count', 2000], ['seller-known-defects', 'seller-defects-count', 500]]
+            .forEach(([inputId, countId, maximum]) => {
+                documentRef.getElementById(countId).textContent = `${documentRef.getElementById(inputId).value.length} / ${maximum}`;
+            });
+    }
+
+    function updateActiveSection() {
+        const openSection = sectionDetails.find(section => section.open);
+        sectionDetails.forEach(section => { section.dataset.current = String(section === openSection); });
+    }
+
+    function revealField(field) {
+        const selected = field.closest('[data-seller-section]');
+        if (!selected) return;
+        sectionDetails.forEach(section => { section.open = section === selected; });
+        updateActiveSection();
+    }
+
+    function collectDraftValues() {
+        const values = {};
+        Array.from(form.elements).forEach(field => {
+            if (!field.name || field.type === 'file' || field.name.startsWith('specifications.')) return;
+            values[field.name] = field.type === 'checkbox' ? field.checked : field.value;
+        });
+        values.specifications = Object.fromEntries(Array.from(specificationFields.querySelectorAll('[data-specification]'))
+            .map(field => [field.dataset.specification, field.value]));
+        return values;
+    }
+
+    function restoreDraftValues(values) {
+        const savedSubcategory = values.subcategory;
+        Object.entries(values).forEach(([name, value]) => {
+            if (['specifications', 'mainPhotoIndex', 'photos'].includes(name)) return;
+            const field = form.elements.namedItem(name);
+            if (!field) return;
+            if (field.type === 'checkbox') field.checked = value === true;
+            else field.value = String(value ?? '');
+        });
+        updateSubcategoryOptions();
+        subcategorySelect.value = SUBCATEGORIES_BY_CATEGORY[categorySelect.value]?.includes(savedSubcategory) ? savedSubcategory : '';
+        renderSpecificationFields();
+        const specifications = values.specifications && typeof values.specifications === 'object' ? values.specifications : {};
+        Object.entries(specifications).forEach(([key, value]) => {
+            const field = specificationFields.querySelector(`[data-specification="${key}"]`);
+            if (field) field.value = String(value ?? '');
+        });
+        updateListingFormat();
+        updateReserveControl();
+        updateCharacterCounts();
+        updateReviewSummary();
+    }
+
+    function updateReserveControl() {
+        const controls = documentRef.getElementById('seller-reserve-controls');
+        controls.hidden = inPilotMode();
+        documentRef.getElementById('seller-summary-reserve-row').hidden = inPilotMode();
+        if (inPilotMode()) reserveModeSelect.value = RESERVE_PRICE_MODE.none;
+        const hasReserve = !inPilotMode() && reserveModeSelect.value === RESERVE_PRICE_MODE.set;
+        reservePriceWrap.hidden = !hasReserve;
+        reservePriceInput.disabled = !hasReserve;
+        reservePriceInput.required = hasReserve;
+        if (!hasReserve) reservePriceInput.value = '';
     }
 
     function updateListingFormat() {
@@ -254,39 +430,69 @@ export function createSellerUI({ documentRef = document, dialogController, photo
         documentRef.getElementById('seller-starting-bid').required = auction;
         documentRef.getElementById('seller-starting-bid').disabled = !auction;
         documentRef.getElementById('seller-auction-duration-wrap').hidden = buyNowOnly;
+        documentRef.getElementById('seller-auto-relist-wrap').hidden = buyNowOnly;
+        documentRef.getElementById('seller-auto-relist').disabled = buyNowOnly;
+        documentRef.getElementById('seller-relist-help').hidden = buyNowOnly;
         durationSelect.required = !buyNowOnly;
         durationSelect.disabled = buyNowOnly;
         documentRef.getElementById('seller-buy-now').required = buyNowAvailable;
         documentRef.getElementById('seller-buy-now-controls').hidden = !buyNowAvailable;
         if (!buyNowAvailable) documentRef.getElementById('seller-buy-now').value = '';
+        if (buyNowOnly) {
+            reserveModeSelect.value = RESERVE_PRICE_MODE.none;
+            updateReserveControl();
+        }
     }
 
-    function openForm() {
+    function openForm(draftToResume = null) {
         form.reset();
+        delete form.dataset.submitting;
         updateCategoryOptions();
         updateSubcategoryOptions();
         fulfilmentSelect.value = DEFAULT_FULFILMENT_METHOD;
         durationSelect.value = String(DEFAULT_AUCTION_DURATION_HOURS);
         formatSelect.value = 'auction';
         updateListingFormat();
+        reserveModeSelect.value = RESERVE_PRICE_MODE.none;
+        updateReserveControl();
         photoManager.clearPreviews(photoInput, photoPreviews);
-        documentRef.getElementById('seller-location').value = config.pilotCity;
-        documentRef.getElementById('seller-location').readOnly = inPilotMode();
+        locationSelect.value = config.pilotCity;
+        locationSelect.disabled = inPilotMode();
         documentRef.getElementById('seller-estimated-value').required = inPilotMode();
-        photoInput.required = inPilotMode();
+        const draft = draftToResume?.values ? draftToResume : loadSellerDraft(userService.getCurrentUser()?.id);
+        if (draft) {
+            restoreDraftValues(draft.values);
+            recordEvent(USABILITY_EVENT_TYPE.sellerDraftResumed, { metadata: { source: 'seller_panel' } });
+        }
+        sectionDetails.forEach((section, index) => { section.open = index === 0; });
+        updateActiveSection();
+        updateCharacterCounts();
         updateReviewSummary();
         errorElement.textContent = '';
         documentRef.getElementById('seller-listing-success').hidden = true;
         documentRef.getElementById('seller-listing-done').hidden = true;
         form.hidden = false;
-        recordEvent(USABILITY_EVENT_TYPE.sellerSubmissionStarted);
+        recordEvent(USABILITY_EVENT_TYPE.sellerFormStarted);
         dialogController.open(dialog, startButton);
     }
 
+    function saveDraft() {
+        if (accountGate(() => saveDraft(), documentRef.getElementById('seller-save-draft')) === false) return;
+        const result = saveSellerDraft(userService.getCurrentUser().id, collectDraftValues());
+        if (!result.ok) {
+            errorElement.textContent = 'This browser could not save your draft.';
+            return;
+        }
+        recordEvent(USABILITY_EVENT_TYPE.sellerDraftSaved, { metadata: { source: 'seller_form' } });
+        announceGlobalStatus('Draft saved in this browser. Photo files may need to be selected again.', documentRef, { allowDialog: true });
+        renderSubmissions();
+    }
+
     function renderSubmissions() {
+        const currentUserId = userService.getCurrentUser()?.id;
         const items = loadSellerSubmissions()
             .filter(isRenderableSellerSubmission)
-            .filter(submission => submission.sellerUserId === userService.getCurrentUser().id)
+            .filter(submission => submission.sellerUserId === currentUserId)
             .map(submission => {
                 const item = documentRef.createElement('li');
                 item.className = 'seller-submission-item';
@@ -313,8 +519,44 @@ export function createSellerUI({ documentRef = document, dialogController, photo
                 status.className = 'seller-submission-status';
                 status.textContent = SUBMISSION_STATUS_LABELS[submission.status] || 'Submitted';
                 item.append(details, status);
+                if (submission.status === SUBMISSION_STATUS.published && submission.autoRelistLimit > (submission.autoRelistCount || 0)) {
+                    const disableRelist = documentRef.createElement('button');
+                    disableRelist.type = 'button';
+                    disableRelist.className = 'account-action';
+                    disableRelist.textContent = 'Disable future automatic relists';
+                    disableRelist.addEventListener('click', () => onDisableAutoRelist(submission.listingId));
+                    item.append(disableRelist);
+                }
                 return item;
             });
+
+        const draft = loadSellerDraft(currentUserId);
+        if (draft) {
+            const item = documentRef.createElement('li');
+            item.className = 'seller-submission-item seller-draft-item';
+            const details = documentRef.createElement('div');
+            const title = documentRef.createElement('h4');
+            title.textContent = String(draft.values.title || '').trim() || 'Untitled draft';
+            const metadata = documentRef.createElement('p');
+            metadata.textContent = `${CATEGORY_LABELS[draft.values.category] || 'Category not selected'} · Updated ${new Date(draft.updatedAt).toLocaleDateString()}`;
+            details.append(title, metadata);
+            const resume = documentRef.createElement('button');
+            resume.type = 'button';
+            resume.className = 'account-action';
+            resume.textContent = 'Resume';
+            resume.addEventListener('click', () => openForm(draft));
+            const remove = documentRef.createElement('button');
+            remove.type = 'button';
+            remove.className = 'account-action';
+            remove.textContent = 'Delete';
+            remove.addEventListener('click', () => {
+                deleteSellerDraft(currentUserId);
+                recordEvent(USABILITY_EVENT_TYPE.sellerDraftDeleted, { metadata: { source: 'seller_panel' } });
+                renderSubmissions();
+            });
+            item.append(details, resume, remove);
+            items.unshift(item);
+        }
 
         submissionList.replaceChildren(...items);
         submissionPanel.hidden = items.length === 0;
@@ -322,23 +564,66 @@ export function createSellerUI({ documentRef = document, dialogController, photo
 
     function submitForm(event) {
         event.preventDefault();
+        if (form.dataset.submitting === 'true') return;
+        if (accountGate(() => form.requestSubmit(), form.querySelector('button[type="submit"]')) === false) return;
         errorElement.textContent = '';
         const formData = new FormData(form);
+        const plainText = value => String(value ?? '').replace(/<[^>]*>/g, '').replace(/[\u0000-\u0008\u000b\u000c\u000e-\u001f]/g, '').trim();
+        const title = plainText(formData.get('title')).slice(0, 60);
+        const brand = plainText(formData.get('brandModel'));
+        const model = plainText(formData.get('model'));
+        const description = plainText(formData.get('description')).slice(0, 2000);
+        const knownDefects = plainText(formData.get('knownDefects')).slice(0, 500);
+        const selectedCondition = String(formData.get('condition') || '');
+        const category = String(formData.get('category') || '');
+        const sellerBrandRequired = category === CATEGORY.electronics || category === CATEGORY.homeAppliances
+            || (category === CATEGORY.fashion && ['sneakers', 'bags', 'accessories'].includes(String(formData.get('subcategory'))));
+        const validationMessage = !title ? 'Enter a listing title.'
+            : sellerBrandRequired && !brand ? 'Enter the brand or maker for this category.'
+                : !selectedCondition ? 'Choose a condition for the item.'
+                : !description ? 'Enter a description using plain text.'
+                    : selectedCondition === 'defective' && !knownDefects ? 'Describe the known functional problem.'
+                        : formData.get('defectsConfirmed') !== 'on' ? 'Confirm that you have disclosed all known defects.'
+                            : formData.get('sellerAcknowledgement') !== 'on' ? 'Accept the seller acknowledgement before submitting.'
+                                : !photoInput.files.length || !photoPreviews.querySelector('input[name="seller-main-photo"]:checked') ? 'Select a main photo for your listing.'
+                                    : '';
+        if (validationMessage) {
+            errorElement.textContent = validationMessage;
+            const target = validationMessage.includes('photo') ? photoInput
+                : validationMessage.includes('defect') ? documentRef.getElementById('seller-known-defects')
+                    : validationMessage.includes('acknowledgement') ? documentRef.getElementById('seller-acknowledgement')
+                        : validationMessage.includes('condition') ? conditionSelect
+                        : documentRef.getElementById('seller-item-title');
+            revealField(target);
+            target.focus();
+            return;
+        }
+        form.dataset.submitting = 'true';
         const buyNowValue = formData.get('buyNowPrice');
+        const reservePriceValue = formData.get('reservePrice');
         const specifications = Object.fromEntries(Array.from(specificationFields.querySelectorAll('[data-specification]'))
-            .map(input => [input.dataset.specification, input.value.trim()])
+            .map(input => [input.dataset.specification, plainText(input.value)])
             .filter(([, value]) => value));
+        const includedItems = plainText(formData.get('includedItems'));
+        if (knownDefects) specifications.knownDefects = knownDefects;
+        if (includedItems) specifications.includedAccessories = includedItems;
+        if (model) specifications.model = model;
+        const seller = userService.getCurrentUser();
         const result = createSellerSubmission({
-            title: String(formData.get('title')),
-            brandModel: String(formData.get('brandModel')),
-            category: String(formData.get('category')),
+            title,
+            brandModel: [brand, model].filter(Boolean).join(' ').slice(0, 100),
+            category,
             subcategory: String(formData.get('subcategory')),
-            sellerUserId: userService.getCurrentUser().id,
+            sellerUserId: seller.id,
+            sellerName: seller.firstName,
+            scenarioId: getActiveScenarioId(),
             fulfilmentMethod: String(formData.get('fulfilmentMethod') || DEFAULT_FULFILMENT_METHOD),
+            meetAndInspectAvailable: formData.get('meetAndInspectAvailable') === 'on',
             specifications,
             photoCount: photoInput.files.length,
-            condition: String(formData.get('condition')),
-            description: String(formData.get('description')),
+            condition: selectedCondition === 'defective' ? CONDITION_GRADE.fair : selectedCondition,
+            conditionLabel: sellerConditionChoices.find(([value]) => value === selectedCondition)?.[1] || '',
+            description,
             location: inPilotMode() ? config.pilotCity : String(formData.get('location')),
             estimatedValue: Number(formData.get('estimatedValue')),
             pilotMode: inPilotMode(),
@@ -347,11 +632,17 @@ export function createSellerUI({ documentRef = document, dialogController, photo
             bidIncrement: Number(formData.get('bidIncrement')),
             buyNowPrice: String(formData.get('listingFormat')) === 'auction' ? null : Number(buyNowValue),
             auctionDurationHours: Number(formData.get('auctionDurationHours')) || DEFAULT_AUCTION_DURATION_HOURS,
-            reservePriceMode: RESERVE_PRICE_MODE.none,
-            reservePrice: null
+            sellerAcknowledged: true,
+            autoRelistLimit: { decide: 0, once: 1, three: 3 }[String(formData.get('autoRelist'))] || 0,
+            sellerReference: plainText(formData.get('sellerReference')).slice(0, 40),
+            reservePriceMode: inPilotMode() || String(formData.get('listingFormat')) === 'buy_now'
+                ? RESERVE_PRICE_MODE.none : String(formData.get('reservePriceMode')),
+            reservePrice: inPilotMode() || String(formData.get('listingFormat')) === 'buy_now'
+                ? null : reservePriceValue === null || reservePriceValue === '' ? null : Number(reservePriceValue)
         });
 
         if (!result.ok) {
+            form.dataset.submitting = 'false';
             if (result.validation?.validBidIncrement === false) {
                 errorElement.textContent = 'Choose one of the available bid increments.';
             } else if (result.validation?.validStartingBid === false) {
@@ -381,18 +672,23 @@ export function createSellerUI({ documentRef = document, dialogController, photo
             }
             const fieldId = result.validation && [
                 ['validStartingBid', 'seller-starting-bid'], ['validSubcategory', 'seller-subcategory'],
-                ['validBuyNowPrice', 'seller-buy-now'],
+                ['validBuyNowPrice', 'seller-buy-now'], ['validReservePrice', 'seller-reserve-price'],
                 ['validAuctionDuration', 'seller-auction-duration'], ['validPriceLimit', 'seller-starting-bid']
             ].find(([rule]) => result.validation[rule] === false)?.[1];
             if (fieldId) {
                 const field = documentRef.getElementById(fieldId);
+                revealField(field);
                 field.setAttribute('aria-invalid', 'true');
                 field.focus();
             }
             return;
         }
 
-        photoManager.rememberFiles(result.submission.id, photoInput.files);
+        const mainPhotoIndex = Number(photoPreviews.querySelector('input[name="seller-main-photo"]:checked')?.value || 0);
+        const orderedFiles = Array.from(photoInput.files);
+        if (mainPhotoIndex > 0) orderedFiles.unshift(...orderedFiles.splice(mainPhotoIndex, 1));
+        photoManager.rememberFiles(result.submission.id, orderedFiles);
+        deleteSellerDraft(seller.id);
         recordEvent(USABILITY_EVENT_TYPE.sellerSubmissionCompleted, {
             relatedId: result.submission.listingId,
             metadata: { category: result.submission.category, subcategory: result.submission.subcategory }
@@ -402,7 +698,7 @@ export function createSellerUI({ documentRef = document, dialogController, photo
         photoManager.clearPreviews(photoInput, photoPreviews);
         form.hidden = true;
         const success = documentRef.getElementById('seller-listing-success');
-        success.textContent = 'Listing submitted for review. It will appear after approval. Photos are available only during this visit.';
+        success.textContent = 'Saved as a pending-review simulation in this browser. No real review or publication occurs. Photos are available only during this visit.';
         success.hidden = false;
         documentRef.getElementById('seller-listing-done').hidden = false;
     }
@@ -412,10 +708,28 @@ export function createSellerUI({ documentRef = document, dialogController, photo
         updateSubcategoryOptions();
         updateReviewSummary();
     });
+    conditionSelect.addEventListener('change', () => {
+        const defectInput = documentRef.getElementById('seller-known-defects');
+        defectInput.placeholder = conditionSelect.value === 'defective'
+            ? 'Describe the known functional problem.'
+            : conditionSelect.value === CONDITION_GRADE.fair ? 'Describe clear wear or disclosed issues.' : '';
+        updateReviewSummary();
+    });
     formatSelect.addEventListener('change', () => {
         updateListingFormat();
         updateReviewSummary();
+        recordEvent(USABILITY_EVENT_TYPE.sellingFormatSelected, {
+            metadata: { category: categorySelect.value, subcategory: subcategorySelect.value, format: formatSelect.value }
+        });
     });
+    incrementSelect.addEventListener('change', () => recordEvent(USABILITY_EVENT_TYPE.sellingFormatSelected, {
+        metadata: {
+            category: categorySelect.value,
+            subcategory: subcategorySelect.value,
+            format: formatSelect.value,
+            bidIncrementOption: incrementSelect.value
+        }
+    }));
     subcategorySelect.addEventListener('change', () => {
         renderSpecificationFields();
         updateReviewSummary();
@@ -423,13 +737,97 @@ export function createSellerUI({ documentRef = document, dialogController, photo
             metadata: { category: categorySelect.value, subcategory: subcategorySelect.value, source: 'category_selection' }
         });
     });
-    photoInput.addEventListener('change', () => photoManager.showPreviews(photoInput, photoPreviews, errorElement));
-    form.addEventListener('input', updateReviewSummary);
-    form.addEventListener('change', updateReviewSummary);
+    photoInput.addEventListener('change', () => {
+        photoManager.showPreviews(photoInput, photoPreviews, errorElement, photoPurposeSelect.value);
+        updateReviewSummary();
+    });
+    form.addEventListener('input', () => {
+        documentRef.activeElement?.removeAttribute('aria-invalid');
+        updateCharacterCounts();
+        updateReviewSummary();
+    });
+    form.addEventListener('change', event => {
+        updateCharacterCounts();
+        updateReviewSummary();
+        if (event.target === durationSelect) recordEvent(USABILITY_EVENT_TYPE.auctionDurationSelected, {
+            metadata: { durationOption: durationSelect.value, category: categorySelect.value, subcategory: subcategorySelect.value }
+        });
+        if (event.target.id === 'seller-auto-relist') recordEvent(USABILITY_EVENT_TYPE.autoRelistSelected, {
+            metadata: { autoRelistChoice: event.target.value, category: categorySelect.value, subcategory: subcategorySelect.value }
+        });
+        if (event.target === fulfilmentSelect) recordEvent(USABILITY_EVENT_TYPE.sellerFulfilmentSelected, {
+            metadata: { fulfilment: fulfilmentSelect.value, category: categorySelect.value, subcategory: subcategorySelect.value }
+        });
+    });
+    sectionDetails.forEach(section => section.addEventListener('toggle', () => {
+        if (section.open) sectionDetails.forEach(other => { if (other !== section) other.open = false; });
+        if (!section.open) recordEvent(USABILITY_EVENT_TYPE.sellerSectionCompleted, {
+            metadata: { code: section.dataset.sellerSection }
+        });
+        updateActiveSection();
+    }));
+    reserveModeSelect.addEventListener('change', () => {
+        updateReserveControl();
+        updateReviewSummary();
+    });
+    documentRef.getElementById('seller-save-draft').addEventListener('click', saveDraft);
+    documentRef.getElementById('seller-preview-listing').addEventListener('click', () => {
+        recordEvent(USABILITY_EVENT_TYPE.sellerPreviewOpened, { metadata: { source: 'preview' } });
+        const values = new FormData(form);
+        const selected = sellerConditionChoices.find(([value]) => value === values.get('condition'));
+        const specifications = Object.fromEntries(Array.from(specificationFields.querySelectorAll('[data-specification]'))
+            .map(field => [field.dataset.specification, field.value.replace(/<[^>]*>/g, '').trim()]).filter(([, value]) => value));
+        const defects = String(values.get('knownDefects') || '').trim();
+        const included = String(values.get('includedItems') || '').trim();
+        if (defects) specifications.knownDefects = defects;
+        if (included) specifications.includedAccessories = included;
+        const selectedFormat = String(values.get('listingFormat') || LISTING_FORMAT.auction);
+        const previewImages = Array.from(photoPreviews.querySelectorAll('img')).map(image => image.src);
+        const mainIndex = Number(photoPreviews.querySelector('input[name="seller-main-photo"]:checked')?.value || 0);
+        if (mainIndex > 0) previewImages.unshift(...previewImages.splice(mainIndex, 1));
+        const seller = userService.getCurrentUser();
+        onPreviewListing({
+            title: String(values.get('title') || '').trim(),
+            brandModel: [String(values.get('brandModel') || '').trim(), String(values.get('model') || '').trim()].filter(Boolean).join(' '),
+            category: String(values.get('category') || CATEGORY.electronics),
+            subcategory: String(values.get('subcategory') || ''),
+            conditionGrade: selected?.[0] === 'defective' ? CONDITION_GRADE.fair : selected?.[0] || CONDITION_GRADE.good,
+            conditionLabel: selected?.[1] || 'Good',
+            description: String(values.get('description') || '').trim(),
+            specifications,
+            accessories: included ? included.split(',').map(item => item.trim()).filter(Boolean) : [],
+            images: previewImages,
+            image: previewImages[0] || null,
+            sellerUserId: seller.id,
+            sellerName: seller.firstName,
+            location: String(values.get('location') || config.pilotCity),
+            listingFormat: selectedFormat,
+            startingBid: selectedFormat === LISTING_FORMAT.buyNow ? Number(values.get('buyNowPrice')) || 1 : Number(values.get('startingBid')) || 1,
+            bidIncrement: Number(values.get('bidIncrement')) || 100,
+            buyNowPrice: selectedFormat === LISTING_FORMAT.auction ? null : Number(values.get('buyNowPrice')) || null,
+            auctionDurationHours: Number(values.get('auctionDurationHours')) || DEFAULT_AUCTION_DURATION_HOURS,
+            fulfilmentMethod: String(values.get('fulfilmentMethod') || DEFAULT_FULFILMENT_METHOD),
+            meetAndInspectAvailable: values.get('meetAndInspectAvailable') === 'on',
+            reservePriceMode: RESERVE_PRICE_MODE.none,
+            reservePrice: null
+        });
+    });
     form.addEventListener('submit', submitForm);
     documentRef.getElementById('cancel-seller-listing').addEventListener('click', () => dialogController.close(dialog));
     documentRef.getElementById('seller-listing-done').addEventListener('click', () => dialogController.close(dialog));
     dialog.addEventListener('close', () => photoManager.clearPreviews(photoInput, photoPreviews));
 
-    return { openForm, renderSubmissions };
+    return {
+        openForm,
+        renderSubmissions,
+        getDraft() { return loadSellerDraft(userService.getCurrentUser()?.id); },
+        resumeDraft(draft) { openForm(draft); },
+        deleteDraft() {
+            const userId = userService.getCurrentUser()?.id;
+            deleteSellerDraft(userId);
+            recordEvent(USABILITY_EVENT_TYPE.sellerDraftDeleted, { metadata: { source: 'seller_panel' } });
+            renderSubmissions();
+        },
+        setAccountGate(handler) { accountGate = handler; }
+    };
 }

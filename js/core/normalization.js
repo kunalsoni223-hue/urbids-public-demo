@@ -29,6 +29,12 @@ export function isStableId(value) {
     return typeof value === 'string' && /^[A-Za-z0-9_-]{1,200}$/.test(value);
 }
 
+export function isPrototypeUserId(value) {
+    return typeof value === 'string'
+        && (value.startsWith('demo-user-') || value.startsWith('local-'))
+        && isStableId(value);
+}
+
 export function normalizeTimestamp(value) {
     return typeof value === 'string' && Number.isFinite(Date.parse(value)) ? value : null;
 }

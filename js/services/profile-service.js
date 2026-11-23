@@ -46,6 +46,9 @@ export function createProfileService({ listingStates, transactionStore, userServ
             avatarColor: user.avatarColor,
             location: user.location,
             memberSince: user.memberSince,
+            isNewMember: user.isNewMember === true
+                && reputation.completedTransactions === 0
+                && reputation.receivedRatingCount === 0,
             rating: reputation.sellerRating,
             completedTransactions: reputation.completedTransactions,
             resolvedNoShows: resolvedSellerNoShows(userId),

@@ -13,10 +13,10 @@ const sampleImages = {
     macbookPro: [unsplash('1629131726692-1accd0c53ce0'), unsplash('1535957998253-26ae1ef29506')],
     garmin: [unsplash('1722445423163-f57f92ea9f78'), unsplash('1725137801173-1698d4cca0cd')],
     galaxyWatch: [unsplash('1579586337278-3befd40fd17a'), unsplash('1762768752302-8b7a2a04b68e')],
-    overEar: [unsplash('1618366712010-f4ae9c647dcb')],
+    overEar: [unsplash('1618366712010-f4ae9c647dcb'), unsplash('1590658268037-6bf12165a8df')],
     speaker: [unsplash('1608043152269-423dbba4e7e1')],
     sofa: [unsplash('1555041469-a586c61ea9bc')],
-    armchair: [unsplash('1757969704802-4d0050f038d7')],
+    armchair: [unsplash('1580480055273-228ff5388ef8'), unsplash('1757969704802-4d0050f038d7')],
     diningTable: [unsplash('1758977404039-6e834be8eca8'), unsplash('1604578762246-41134e37f9cc')],
     bookshelf: [unsplash('1778088442532-2a3ed3767931'), unsplash('1593430980369-68efc5a5eb34')],
     standMixer: [unsplash('1577495917765-9497a0de7caa'), unsplash('1758565810987-ca8d617ea7be')],
@@ -49,12 +49,18 @@ const sampleImages = {
     ],
     nikeAirMax90: 'https://images.unsplash.com/photo-1542291026-7eec264c27ff?auto=format&fit=crop&w=900&q=80',
     newBalance990v6: 'https://images.unsplash.com/photo-1552346154-21d32810aba3?auto=format&fit=crop&w=900&q=80',
-    bags: ['https://images.unsplash.com/photo-1584917865442-de89df76afd3?auto=format&fit=crop&w=900&q=80'],
+    bags: [
+        'https://images.unsplash.com/photo-1548036328-c9fa89d128fa?auto=format&fit=crop&w=900&q=80',
+        'https://images.unsplash.com/photo-1584917865442-de89df76afd3?auto=format&fit=crop&w=900&q=80'
+    ],
     backpack: [
         'https://images.unsplash.com/photo-1553062407-98eeb64c6a62?auto=format&fit=crop&w=900&q=80',
         'https://images.unsplash.com/photo-1622560480654-d96214fdc887?auto=format&fit=crop&w=900&q=80'
     ],
-    jacket: [unsplash('1551028719-00167b16eac5')]
+    jacket: [
+        'https://images.unsplash.com/photo-1551028719-00167b16eac5?auto=format&fit=crop&w=900&q=80',
+        'https://images.unsplash.com/photo-1591047139829-d91aecb6caea?auto=format&fit=crop&w=900&q=80'
+    ]
 };
 
 export const listings = [
@@ -1034,10 +1040,3 @@ export const listings = [
         auctionEndLabel: 'Ends Oct 24, 10 PM'
     }
 ];
-
-for (const listing of listings) {
-    if (!listing.images?.some(imageUrl => imageUrl.startsWith('https://images.unsplash.com/'))) continue;
-    if (!listing.imageAlt.toLowerCase().startsWith('illustrative sample photo')) {
-        listing.imageAlt = `Illustrative sample photo: ${listing.imageAlt}`;
-    }
-}

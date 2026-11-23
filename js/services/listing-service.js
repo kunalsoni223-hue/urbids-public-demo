@@ -1,7 +1,8 @@
 import { config } from '../config.js';
 import { listings as staticListings } from '../data/sample-listings.js';
 import { CATEGORY_LABELS, CONDITION_GRADE_LABELS, DEFAULT_DEMO_USER_ID, LISTING_FORMAT, SELLER_LISTING_ID_PREFIX, SUBCATEGORY_LABELS, SUBMISSION_STATUS, TRANSACTION_STATUS } from '../core/constants.js';
-import { getDemoUser, isDemoUserId } from '../data/demo-users.js';
+import { getDemoUser } from '../data/demo-users.js';
+import { isPrototypeUserId } from '../core/normalization.js';
 import { validateSellerListing } from '../core/validation.js';
 import { normalizeBidIncrement, normalizeFulfilmentMethod, normalizeSpecifications } from '../core/normalization.js';
 import { saveSellerSubmissions } from './submission-service.js';
@@ -26,13 +27,88 @@ export function getDiscoveryListings(listings, { discovery, watchlist, transacti
     return result;
 }
 
+function isAvailableListing(listing, transactionStore, now) {
+    if (!listing || transactionStore.isPaused(listing.id)) return false;
+    const transaction = transactionStore.get(listing.id);
+    if (transaction.status !== TRANSACTION_STATUS.auctionActive) return false;
+    return listing.listingFormat === LISTING_FORMAT.buyNow
+        ? Number.isSafeInteger(listing.buyNowPrice) && listing.buyNowPrice > 0
+        : Date.parse(listing.auctionEndsAt) > now;
+}
+
+function signalCount(signals, listingId) {
+    if (signals instanceof Map) return Number(signals.get(listingId)) || 0;
+    return Number(signals?.[listingId]) || 0;
+}
+
+export function getDiscoveryShelfListings(listings, {
+    shelf, transactionStore, isPublicListing = () => true, watchedCategories = new Set(),
+    recentlyViewedIds = [], watchCounts = new Map(), viewCounts = new Map(), now = Date.now(), limit = 6
+}) {
+    const publicListings = listings.filter(listing => isPublicListing(listing) && !listing.secondChanceOffer);
+    const available = publicListings.filter(listing => isAvailableListing(listing, transactionStore, now));
+    let result = available;
+
+    if (shelf === 'ending-soon') {
+        result = available.filter(listing => listing.listingFormat !== LISTING_FORMAT.buyNow
+            && Date.parse(listing.auctionEndsAt) > now);
+        result.sort((left, right) => Date.parse(left.auctionEndsAt) - Date.parse(right.auctionEndsAt)
+            || left.id.localeCompare(right.id));
+    } else if (shelf === 'popular') {
+        const score = listing => Math.max(0, Number(listing.bidCount) || 0)
+            + signalCount(watchCounts, listing.id) + signalCount(viewCounts, listing.id);
+        result = available.filter(listing => score(listing) > 0);
+        result.sort((left, right) => score(right) - score(left)
+            || (Date.parse(right.listedAt) || 0) - (Date.parse(left.listedAt) || 0)
+            || left.id.localeCompare(right.id));
+    } else if (shelf === 'newly-listed') {
+        result = available.filter(listing => Number.isFinite(Date.parse(listing.listedAt)));
+        result.sort((left, right) => Date.parse(right.listedAt) - Date.parse(left.listedAt)
+            || left.id.localeCompare(right.id));
+    } else if (shelf === 'recently-viewed') {
+        const order = new Map(recentlyViewedIds.map((id, index) => [id, index]));
+        result = available.filter(listing => order.has(listing.id));
+        result.sort((left, right) => order.get(left.id) - order.get(right.id));
+    } else if (shelf === 'watched-categories') {
+        result = available.filter(listing => watchedCategories.has(listing.category));
+        result.sort((left, right) => (Date.parse(right.listedAt) || 0) - (Date.parse(left.listedAt) || 0)
+            || left.id.localeCompare(right.id));
+    } else return [];
+
+    return result.slice(0, Math.max(0, limit));
+}
+
+export function sortMarketplaceListings(listings, { sort = 'featured', now = Date.now() } = {}) {
+    const result = [...listings];
+    if (sort === 'ending-soon') {
+        const isActiveAuction = listing => listing.listingFormat !== LISTING_FORMAT.buyNow
+            && Date.parse(listing.auctionEndsAt) > now;
+        result.sort((left, right) => Number(isActiveAuction(right)) - Number(isActiveAuction(left))
+            || (isActiveAuction(left) ? Date.parse(left.auctionEndsAt) - Date.parse(right.auctionEndsAt) : 0)
+            || left.id.localeCompare(right.id));
+    } else if (sort === 'newest') {
+        result.sort((left, right) => (Date.parse(right.listedAt) || 0) - (Date.parse(left.listedAt) || 0)
+            || left.id.localeCompare(right.id));
+    } else if (sort === 'price-low') {
+        result.sort((left, right) => (left.listingFormat === LISTING_FORMAT.buyNow ? left.buyNowPrice : left.currentBid)
+            - (right.listingFormat === LISTING_FORMAT.buyNow ? right.buyNowPrice : right.currentBid)
+            || left.id.localeCompare(right.id));
+    } else if (sort === 'price-high') {
+        result.sort((left, right) => (right.listingFormat === LISTING_FORMAT.buyNow ? right.buyNowPrice : right.currentBid)
+            - (left.listingFormat === LISTING_FORMAT.buyNow ? left.buyNowPrice : left.currentBid)
+            || left.id.localeCompare(right.id));
+    }
+    return result;
+}
+
 export function listingPlaceholderLabel(listing) {
     const label = SUBCATEGORY_LABELS[listing.subcategory] || CATEGORY_LABELS[listing.category] || 'Item';
     return `${label} listing`;
 }
 
 function withSellerProfile(listing) {
-    const seller = getDemoUser(listing.sellerUserId) || getDemoUser(DEFAULT_DEMO_USER_ID);
+    const seller = getDemoUser(listing.sellerUserId);
+    const sellerUserId = isPrototypeUserId(listing.sellerUserId) ? listing.sellerUserId : DEFAULT_DEMO_USER_ID;
     return {
         ...listing,
         bidIncrement: normalizeBidIncrement(listing.bidIncrement, listing.currentBid),
@@ -42,10 +118,10 @@ function withSellerProfile(listing) {
             ? listing.location : config.pilotCity,
         specifications: normalizeSpecifications(listing.specifications),
         fulfilmentMethod: normalizeFulfilmentMethod(listing.fulfilmentMethod),
-        sellerUserId: seller.id,
-        sellerProfile: seller,
-        sellerName: seller.firstName,
-        sellerRating: `${seller.sellerRating.toFixed(1)}/5`
+        sellerUserId,
+        sellerProfile: seller || listing.sellerProfile || null,
+        sellerName: seller?.firstName || listing.sellerName || 'Former prototype member',
+        sellerRating: seller?.sellerRating == null ? null : `${seller.sellerRating.toFixed(1)}/5`
     };
 }
 
@@ -103,7 +179,7 @@ function normalizePublishedSubmission(submission, now) {
 }
 
 function isPublishableSubmission(submission) {
-    return isDemoUserId(submission.sellerUserId) && validateSellerListing(submission).valid;
+    return isPrototypeUserId(submission.sellerUserId) && validateSellerListing(submission).valid;
 }
 
 export function createPublishedSellerListing(submission, imageUrl = null) {
@@ -132,8 +208,10 @@ export function createPublishedSellerListing(submission, imageUrl = null) {
         priceChangedAt: typeof submission.priceChangedAt === 'string' ? submission.priceChangedAt : null,
         publicationStatus: SUBMISSION_STATUS.published,
         sellerUserId: submission.sellerUserId,
+        sellerName: submission.sellerName,
         specifications,
         fulfilmentMethod: submission.fulfilmentMethod,
+        meetAndInspectAvailable: submission.meetAndInspectAvailable !== false,
         listingFormat: submission.listingFormat || (Number.isSafeInteger(submission.buyNowPrice)
             ? LISTING_FORMAT.auctionAndBuyNow : LISTING_FORMAT.auction),
         title: submission.title,
@@ -144,7 +222,7 @@ export function createPublishedSellerListing(submission, imageUrl = null) {
         images,
         imageAlt: `${submission.title} photo`,
         conditionGrade: submission.condition,
-        conditionLabel: CONDITION_GRADE_LABELS[submission.condition] || submission.condition,
+        conditionLabel: submission.conditionLabel || CONDITION_GRADE_LABELS[submission.condition] || submission.condition,
         description: submission.description,
         accessories: Array.isArray(specifications.includedAccessories)
             ? specifications.includedAccessories

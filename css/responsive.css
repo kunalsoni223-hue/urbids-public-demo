@@ -38,7 +38,8 @@
     }
 
     .navigation {
-        grid-template-columns: minmax(0, 1fr) auto auto auto auto;
+        grid-template-columns: minmax(0, 1fr) auto auto auto;
+        grid-template-rows: 58px auto;
         min-height: 58px;
         gap: 8px;
     }
@@ -48,8 +49,14 @@
     }
 
     .header-search {
-        display: none;
+        position: static;
+        grid-column: 1 / -1;
+        grid-row: 2;
+        display: block;
+        padding: 0 0 9px;
     }
+
+    .mobile-search-toggle { display: none; }
 
     .navigation.search-open {
         grid-template-rows: 58px auto;
@@ -199,17 +206,6 @@
         font-size: var(--text-label);
     }
 
-    .discovery-tabs {
-        min-height: var(--control-height);
-        padding-right: 14px;
-    }
-
-    .discovery-tab {
-        min-height: var(--control-height);
-        padding: 6px 11px;
-        font-size: var(--text-label);
-    }
-
     .listing-filter-panel {
         margin-bottom: 12px;
         border: 1px solid var(--color-border);
@@ -255,11 +251,26 @@
 
     .condition-filter,
     .price-filter,
+    .locality-filter,
     .sort-filter {
         min-width: 0;
     }
 
+    .discovery-shelf-listings {
+        grid-auto-columns: minmax(210px, 78vw);
+        margin-right: -8px;
+        padding-right: 8px;
+    }
+
+    .explore-more-shortcuts {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+
+    .explore-more-button { min-width: 0; overflow-wrap: anywhere; }
+
     .condition-filter select,
+    .locality-filter select,
     .price-filter input,
     .sort-filter select {
         width: 100%;
@@ -381,7 +392,6 @@
 
     button,
     .listing-title-button,
-    .prototype-tool-button,
     .account-action,
     .account-subtab,
     .account-tabs button,
@@ -391,17 +401,6 @@
     .listing-gallery-arrow,
     .category-nav-button,
     .subcategory-nav-button,
-    .discovery-tab,
-    .listing-filter-panel > summary,
-    .mobile-menu > summary {
-        min-height: 44px;
-        min-width: 44px;
-    }
-
-    .bid-dialog input:not([type="checkbox"]):not([type="radio"]),
-    .bid-dialog select,
-    .bid-dialog textarea {
-        min-height: 44px;
         /* Keep iOS from zooming when a text control receives focus. */
         font-size: var(--text-input);
     }
@@ -449,6 +448,19 @@
         grid-template-columns: 1fr;
     }
 
+    .seller-form-section > summary {
+        padding-inline: 9px;
+    }
+
+    .seller-photo-guidance {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+
+    .seller-review-actions > button {
+        flex: 1 1 140px;
+        min-height: 44px;
+    }
+
     .seller-submission-item {
         flex-direction: column;
         gap: 8px;
@@ -457,6 +469,10 @@
 }
 
 @media (max-width: 480px) {
+    .seller-review-checklist {
+        grid-template-columns: minmax(0, 1fr);
+    }
+
     .bid-summary {
         grid-template-columns: minmax(0, 1fr);
         gap: var(--space-1);
@@ -498,6 +514,14 @@
         width: calc(100% - 20px);
     }
 
+    .hero {
+        padding: 6px 0 4px;
+    }
+
+    .hero-content {
+        gap: 4px;
+    }
+
     .detail-listing-grid {
         grid-template-columns: minmax(0, 1fr);
     }
@@ -509,14 +533,6 @@
     .listing-question-actions > select,
     .listing-question-actions > button {
         width: 100%;
-    }
-
-    .hero {
-        padding: 6px 0 4px;
-    }
-
-    .hero-content {
-        gap: 4px;
     }
 
     .hero h1 {
@@ -561,7 +577,6 @@
         display: none;
     }
 
-    .discovery-tabs,
     .listing-filter-panel {
         margin-bottom: 4px;
     }
@@ -587,11 +602,6 @@
         gap: 3px;
     }
 
-    .discovery-tabs {
-        margin-right: -10px;
-        padding-right: 10px;
-    }
-
     .mobile-search-toggle,
     .mobile-watchlist-toggle,
     .notification-center-button {
@@ -603,4 +613,24 @@
         grid-template-columns: 1fr 1fr;
     }
 
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .hero a.primary-button,
+    .hero a.secondary-button {
+        transition: none;
+    }
+
+    .category-nav-button,
+    .subcategory-nav-button {
+        transition: none;
+    }
+
+    details > summary {
+        transition: none;
+    }
+
+    details > summary::after {
+        transition: none;
+    }
 }

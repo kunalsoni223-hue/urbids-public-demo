@@ -1,8 +1,8 @@
-import { DEFAULT_DEMO_USER_ID, RATING_CONSTRAINTS, SERVICE_ERROR_CODE, STORAGE_KEYS, TRANSACTION_STATUS } from '../core/constants.js';
+import { RATING_CONSTRAINTS, SERVICE_ERROR_CODE, STORAGE_KEYS, TRANSACTION_STATUS } from '../core/constants.js';
 import { readArray, writeJSON } from '../core/storage.js';
-import { getDemoUser, isDemoUserId } from '../data/demo-users.js';
+import { isDemoUserId } from '../data/demo-users.js';
 import { sampleReviews } from '../data/sample-reviews.js';
-import { isStableId, normalizeTimestamp, uniqueRecords } from '../core/normalization.js';
+import { isPrototypeUserId, isStableId, normalizeTimestamp, uniqueRecords } from '../core/normalization.js';
 
 export function createRatingService({ listingStates, transactionStore, userService, notificationService = null, now = () => new Date() }) {
     const seenRatingDirections = new Set();
@@ -12,8 +12,8 @@ export function createRatingService({ listingStates, transactionStore, userServi
         && !Array.isArray(rating)
         && typeof rating.id === 'string'
         && isStableId(rating.transactionId)
-        && isDemoUserId(rating.reviewerUserId)
-        && isDemoUserId(rating.reviewedUserId)
+        && isPrototypeUserId(rating.reviewerUserId)
+        && isPrototypeUserId(rating.reviewedUserId)
         && rating.reviewerUserId !== rating.reviewedUserId
         && Number.isInteger(rating.score)
         && rating.score >= RATING_CONSTRAINTS.minimumScore
@@ -41,22 +41,27 @@ export function createRatingService({ listingStates, transactionStore, userServi
     }
 
     function getReputation(userId) {
-        const user = userService.getUser(userId) || getDemoUser(DEFAULT_DEMO_USER_ID);
+        const user = userService.getUser(userId) || {
+            id: userId,
+            sellerRating: null,
+            completedTransactions: 0,
+            isNewMember: true
+        };
         const received = getReceivedRatings(user.id);
         const completedTransactions = Array.from(listingStates.keys()).filter(listingId => {
             const transaction = transactionStore.get(listingId);
             return transaction.status === TRANSACTION_STATUS.completed
                 && [transaction.buyerUserId, transaction.sellerUserId].includes(user.id);
         }).length;
-        const ratingWeight = user.completedTransactions;
+        const ratingWeight = user.isNewMember ? 0 : user.completedTransactions;
         const totalRatingWeight = ratingWeight + received.length;
         const averageRating = totalRatingWeight
             ? (user.sellerRating * ratingWeight + received.reduce((total, rating) => total + rating.score, 0)) / totalRatingWeight
-            : user.sellerRating;
+            : user.isNewMember ? null : user.sellerRating;
 
         return {
             ...user,
-            sellerRating: Math.round(averageRating * 10) / 10,
+            sellerRating: averageRating == null ? null : Math.round(averageRating * 10) / 10,
             completedTransactions: user.completedTransactions + completedTransactions,
             noShowCount: 0,
             receivedRatingCount: received.length
@@ -75,7 +80,9 @@ export function createRatingService({ listingStates, transactionStore, userServi
             date: rating.createdAt,
             sample: false
         }));
-        const seeded = sampleReviews.filter(review => review.reviewedUserId === userId).map(({ reviewedUserId, ...review }) => review);
+        const seeded = isDemoUserId(userId)
+            ? sampleReviews.filter(review => review.reviewedUserId === userId).map(({ reviewedUserId, ...review }) => review)
+            : [];
         return [...submitted, ...seeded].sort((left, right) => Date.parse(right.date) - Date.parse(left.date));
     }
 
@@ -93,8 +100,8 @@ export function createRatingService({ listingStates, transactionStore, userServi
             const transaction = transactionStore.get(transactionId);
             const reviewedUserId = reviewedUserFor(transaction, reviewerUserId);
             return transaction.status === TRANSACTION_STATUS.completed
-                && isDemoUserId(reviewerUserId)
-                && isDemoUserId(reviewedUserId)
+                && isPrototypeUserId(reviewerUserId)
+                && isPrototypeUserId(reviewedUserId)
                 && reviewedUserId !== reviewerUserId
                 && !ratings.some(rating => rating.transactionId === transactionId && rating.reviewerUserId === reviewerUserId);
         },
@@ -148,7 +155,7 @@ export function createRatingService({ listingStates, transactionStore, userServi
             return ratings.filter(rating => rating.transactionId === transactionId);
         },
         removeForUser(userId) {
-            if (!isDemoUserId(userId)) return false;
+            if (!isPrototypeUserId(userId)) return false;
             return removeMatching(rating => rating.reviewerUserId === userId || rating.reviewedUserId === userId);
         },
         getReputation

@@ -2,7 +2,7 @@ import { readArray, readRecord, removeStoredValue, writeJSON } from '../core/sto
 import { AUCTION_RESERVE_OUTCOME, AUCTION_STATUS, CATEGORY, DEFAULT_DEMO_USER_ID, DEPOSIT_OUTCOME, DISPUTE_RESOLUTION, FAILURE_OUTCOME, FULFILMENT_METHOD, INSPECTION_REJECTION_REASON, LEGACY_STATUS, MEETUP_ATTENDANCE_STATUS, MEETUP_NO_SHOW_OUTCOME, PURCHASE_SOURCE, RESERVATION_DEPOSIT, RESERVE_PRICE_MODE, SECOND_CHANCE_OFFER_STATUS, SELLER_CANCELLATION_STAGE, SERVICE_ERROR_CODE, SHIPPING_INSPECTION_WINDOW_MS, SHIPPING_STATUS, SPECIFICATION_FIELDS_BY_SUBCATEGORY, SPECIFICATION_FIELD_LABELS, STORAGE_KEYS, SUBCATEGORY, TRANSACTION_EVENT, TRANSACTION_OUTCOME, TRANSACTION_STATUS as transactionStatus, WINNER_CONFIRMATION_WINDOW_MS } from '../core/constants.js';
 import { isValidPurchaseSource, validateInspection, validateMeetup } from '../core/validation.js';
 import { demoUsers, getDemoUser, isDemoUserId } from '../data/demo-users.js';
-import { isRecord, isStableId, normalizeSpecifications, normalizeTimestamp, uniqueRecords } from '../core/normalization.js';
+import { isPrototypeUserId, isRecord, isStableId, normalizeSpecifications, normalizeTimestamp, uniqueRecords } from '../core/normalization.js';
 
 const validStatuses = new Set(Object.values(transactionStatus));
 const transitionRules = new Map([
@@ -154,15 +154,15 @@ function readMeetups() {
         inspectionChecks: Array.isArray(meetup.inspectionChecks)
             ? meetup.inspectionChecks.filter(check => typeof check === 'string') : [],
         attendance: Object.fromEntries(Object.entries(isRecord(meetup.attendance) ? meetup.attendance : {})
-            .filter(([userId]) => isDemoUserId(userId))
+            .filter(([userId]) => isPrototypeUserId(userId))
             .map(([userId, attendance]) => [userId, {
                 status: Object.values(MEETUP_ATTENDANCE_STATUS).includes(attendance?.status)
                     ? attendance.status : MEETUP_ATTENDANCE_STATUS.pending,
                 recordedAt: normalizeTimestamp(attendance?.recordedAt)
             }])),
         noShowReport: isRecord(meetup.noShowReport)
-            && isDemoUserId(meetup.noShowReport.missedUserId)
-            && isDemoUserId(meetup.noShowReport.reporterUserId)
+            && isPrototypeUserId(meetup.noShowReport.missedUserId)
+            && isPrototypeUserId(meetup.noShowReport.reporterUserId)
             ? { ...meetup.noShowReport, reportedAt: normalizeTimestamp(meetup.noShowReport.reportedAt) } : null
     }));
 }
@@ -231,7 +231,8 @@ function canPerformTransaction({ transaction, listing, event, details, userId, i
             || !Object.values(MEETUP_NO_SHOW_OUTCOME).includes(details.noShowOutcome)
             || ![MEETUP_NO_SHOW_OUTCOME.tokenRefundable, MEETUP_NO_SHOW_OUTCOME.tokenForfeited].includes(details.tokenOutcome))) return false;
     if (event === TRANSACTION_EVENT.meetupRequested
-        && ![FULFILMENT_METHOD.inPerson, FULFILMENT_METHOD.both].includes(listing.fulfilmentMethod)) return false;
+        && (listing.meetAndInspectAvailable === false
+            || ![FULFILMENT_METHOD.inPerson, FULFILMENT_METHOD.both].includes(listing.fulfilmentMethod))) return false;
     if (event === TRANSACTION_EVENT.simpleCollection) {
         const inspection = getInspectionReview({
             ...listing,
@@ -433,7 +434,7 @@ function statusFromLegacyMeetup(meetup) {
     return null;
 }
 
-function normalizeTransaction(saved, meetup, listingId, listing, getHighestValidBid, now = () => Date.now()) {
+function normalizeTransaction(saved, meetup, listingId, listing, getHighestValidBid, now = () => Date.now(), getUser = getDemoUser) {
     const legacyStatus = saved?.transactionStatus;
     const hasKnownLegacyAuctionStatus = saved?.auctionStatus === AUCTION_STATUS.active || saved?.auctionStatus === AUCTION_STATUS.ended;
     const savedStatus = validStatuses.has(saved?.status)
@@ -453,13 +454,13 @@ function normalizeTransaction(saved, meetup, listingId, listing, getHighestValid
     const status = meetupIsAhead ? meetupStatus : savedStatus;
     const bidHistory = Array.isArray(saved?.bidHistory)
         ? saved.bidHistory.filter(bid => isRecord(bid) && Number.isSafeInteger(bid.amount) && bid.amount > 0
-            && (isDemoUserId(bid.bidderUserId) || bid.bidderUserId == null)).map(bid => {
-            const bidderUserId = isDemoUserId(bid.bidderUserId) ? bid.bidderUserId : DEFAULT_DEMO_USER_ID;
-            const bidder = getDemoUser(bidderUserId);
+            && (isPrototypeUserId(bid.bidderUserId) || bid.bidderUserId == null)).map(bid => {
+            const bidderUserId = isPrototypeUserId(bid.bidderUserId) ? bid.bidderUserId : DEFAULT_DEMO_USER_ID;
+            const bidder = getUser(bidderUserId);
             const savedName = bid.bidderDisplayName || bid.bidder;
             const bidderDisplayName = typeof savedName === 'string' && savedName !== 'You (demo)'
                 ? savedName
-                : bidder.firstName;
+                : bidder?.firstName || 'Former prototype member';
             return {
                 ...bid,
                 listingId,
@@ -485,7 +486,7 @@ function normalizeTransaction(saved, meetup, listingId, listing, getHighestValid
                 : null;
     const savedWinner = typeof saved?.winner === 'string' ? saved.winner : saved?.highestBidder;
     const matchingUser = demoUsers.find(user => user.firstName === savedWinner);
-    const buyerUserId = noWinner ? null : isDemoUserId(saved?.buyerUserId)
+    const buyerUserId = noWinner ? null : isPrototypeUserId(saved?.buyerUserId)
         ? saved.buyerUserId
         : status === transactionStatus.auctionActive
             ? null
@@ -493,9 +494,9 @@ function normalizeTransaction(saved, meetup, listingId, listing, getHighestValid
                 || (matchingUser && savedWinner !== 'You (demo)' ? matchingUser.id : null)
                 || (purchaseSource || savedWinner ? DEFAULT_DEMO_USER_ID : null);
     const winner = noWinner ? null : buyerUserId
-        ? getDemoUser(buyerUserId).firstName
+        ? getUser(buyerUserId)?.firstName || 'Former prototype member'
         : typeof savedWinner === 'string' && savedWinner !== 'You (demo)' ? savedWinner : null;
-    const sellerUserId = isDemoUserId(saved?.sellerUserId)
+    const sellerUserId = isPrototypeUserId(saved?.sellerUserId)
         ? saved.sellerUserId
         : listing?.sellerUserId || null;
 
@@ -520,7 +521,7 @@ function normalizeTransaction(saved, meetup, listingId, listing, getHighestValid
                     ? meetup.buyNowPrice
                     : null,
         noShowOutcome: Object.values(MEETUP_NO_SHOW_OUTCOME).includes(saved?.noShowOutcome) ? saved.noShowOutcome : null,
-        noShowUserId: isDemoUserId(saved?.noShowUserId) ? saved.noShowUserId : null,
+        noShowUserId: isPrototypeUserId(saved?.noShowUserId) ? saved.noShowUserId : null,
         tokenOutcome: Object.values(MEETUP_NO_SHOW_OUTCOME).includes(saved?.tokenOutcome) ? saved.tokenOutcome : null,
         relistEligible: saved?.relistEligible === true,
         completedAt: normalizeTimestamp(saved?.completedAt),
@@ -554,7 +555,7 @@ function normalizeTransaction(saved, meetup, listingId, listing, getHighestValid
             ? saved.fulfilmentPath
             : [transactionStatus.meetupRequested, transactionStatus.inspectionPending].includes(status) ? 'public_meetup'
                 : [SHIPPING_STATUS.requested, SHIPPING_STATUS.inTransit, SHIPPING_STATUS.delivered].includes(status) ? 'protected_shipping' : null,
-        failedBuyerUserId: isDemoUserId(saved?.failedBuyerUserId) ? saved.failedBuyerUserId : null
+        failedBuyerUserId: isPrototypeUserId(saved?.failedBuyerUserId) ? saved.failedBuyerUserId : null
     };
 }
 
@@ -589,7 +590,7 @@ function migrateMeetupRecords(meetups, transactions) {
         const attendance = meetup.attendance && typeof meetup.attendance === 'object' && !Array.isArray(meetup.attendance)
             ? meetup.attendance
             : {};
-        [transaction?.buyerUserId, transaction?.sellerUserId].filter(isDemoUserId).forEach(userId => {
+        [transaction?.buyerUserId, transaction?.sellerUserId].filter(isPrototypeUserId).forEach(userId => {
             if (!attendance[userId] || !Object.values(MEETUP_ATTENDANCE_STATUS).includes(attendance[userId].status)) {
                 attendance[userId] = { status: MEETUP_ATTENDANCE_STATUS.pending, recordedAt: null };
                 changed = true;
@@ -610,6 +611,7 @@ function migrateMeetupRecords(meetups, transactions) {
 export function createTransactionStore({
     listingStates = new Map(),
     getCurrentUser = () => getDemoUser(DEFAULT_DEMO_USER_ID),
+    getUser = getDemoUser,
     isTransactionPaused = () => false,
     notificationService = null,
     getHighestValidBid,
@@ -633,7 +635,7 @@ export function createTransactionStore({
         const matchingMeetups = meetups.filter(meetup => meetup?.listingId === listingId);
         const meetup = matchingMeetups[matchingMeetups.length - 1] || null;
         const saved = savedTransactions[listingId];
-        const normalized = normalizeTransaction(saved, meetup, listingId, listingStates.get(listingId), getHighestValidBid, now);
+        const normalized = normalizeTransaction(saved, meetup, listingId, listingStates.get(listingId), getHighestValidBid, now, getUser);
         if (saved || statusFromLegacyMeetup(meetup)) transactions.set(listingId, normalized);
         if (saved && !isCanonicalTransaction(saved, normalized)) needsMigration = true;
         if (!saved && statusFromLegacyMeetup(meetup)) needsMigration = true;
@@ -709,7 +711,7 @@ export function createTransactionStore({
             const listing = listingStates.get(listingId);
             const offer = listing?.secondChanceOffer;
             if (!offer || offer.status !== SECOND_CHANCE_OFFER_STATUS.pending || offer.buyerUserId !== userId
-                || !isDemoUserId(offer.buyerUserId) || offer.buyerUserId === listing.sellerUserId
+                || !isPrototypeUserId(offer.buyerUserId) || offer.buyerUserId === listing.sellerUserId
                 || !Number.isSafeInteger(offer.price) || offer.price <= 0
                 || !Number.isFinite(Date.parse(offer.expiresAt)) || Date.parse(offer.expiresAt) <= Date.now()
                 || this.get(listingId).status !== transactionStatus.auctionActive
@@ -934,7 +936,7 @@ export function createTransactionStore({
                 };
             } else if (event === TRANSACTION_EVENT.acceptSecondChance) {
                 const listing = listingStates.get(listingId);
-                const buyer = getDemoUser(details.buyerUserId);
+                const buyer = getUser(details.buyerUserId);
                 if (!buyer || !listing?.secondChanceOffer) return null;
                 next = {
                     ...createDefaultTransaction(),
@@ -942,7 +944,7 @@ export function createTransactionStore({
                     purchaseSource: PURCHASE_SOURCE.auctionWinner,
                     buyerUserId: buyer.id,
                     sellerUserId: listing.sellerUserId,
-                    winner: buyer.firstName,
+                    winner: buyer?.firstName || 'Former prototype member',
                     winningBid: details.transactionPrice,
                     transactionPrice: details.transactionPrice,
                     winnerResponseDeadline: new Date(now() + WINNER_CONFIRMATION_WINDOW_MS).toISOString(),
@@ -1240,6 +1242,34 @@ export function createTransactionStore({
                 const transaction = this.get(meetup?.listingId);
                 return transaction.buyerUserId === userId || transaction.sellerUserId === userId;
             });
+        },
+        resetForUser(userId) {
+            if (!isPrototypeUserId(userId)) return { ok: false, code: SERVICE_ERROR_CODE.invalidInput };
+            const listingIds = Array.from(transactions, ([listingId, transaction]) => (
+                [transaction.buyerUserId, transaction.sellerUserId].includes(userId) ? listingId : null
+            )).filter(Boolean);
+            for (const listingId of listingIds) {
+                if (!this.reset(listingId, { allowPaused: true })) {
+                    return { ok: false, code: SERVICE_ERROR_CODE.storageFailed, resetListingIds: listingIds };
+                }
+            }
+            return { ok: true, data: listingIds };
+        },
+        removeBidHistoryForUser(userId) {
+            if (!isPrototypeUserId(userId)) return { ok: false, code: SERVICE_ERROR_CODE.invalidInput };
+            const updated = new Map(transactions);
+            const changedListingIds = [];
+            transactions.forEach((transaction, listingId) => {
+                const bidHistory = transaction.bidHistory.filter(bid => bid.bidderUserId !== userId);
+                if (bidHistory.length === transaction.bidHistory.length) return;
+                updated.set(listingId, { ...transaction, bidHistory });
+                changedListingIds.push(listingId);
+            });
+            if (!changedListingIds.length) return { ok: true, data: [] };
+            if (!persistTransactions(updated)) return { ok: false, code: SERVICE_ERROR_CODE.storageFailed };
+            transactions.clear();
+            updated.forEach((transaction, listingId) => transactions.set(listingId, transaction));
+            return { ok: true, data: changedListingIds };
         },
         recordMeetupAttendance(meetupId, attendanceStatus) {
             if (!this.canRecordMeetupAttendance(meetupId, attendanceStatus)) return null;

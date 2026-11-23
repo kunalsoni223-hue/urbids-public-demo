@@ -1,4 +1,4 @@
-import { AUCTION_RESERVE_OUTCOME, DEFAULT_AUCTION_DURATION_HOURS, DEFAULT_DEMO_USER_ID, FAILURE_OUTCOME, INSPECTION_REJECTION_REASON, LISTING_FORMAT, RESERVE_PRICE_MODE, SECOND_CHANCE_OFFER_DURATION_MS, SECOND_CHANCE_OFFER_STATUS, SERVICE_ERROR_CODE, SUBMISSION_STATUS, TRANSACTION_OUTCOME, TRANSACTION_STATUS } from '../core/constants.js';
+import { AUCTION_RESERVE_OUTCOME, DEFAULT_AUCTION_DURATION_HOURS, FAILURE_OUTCOME, INSPECTION_REJECTION_REASON, LISTING_FORMAT, RESERVE_PRICE_MODE, SECOND_CHANCE_OFFER_DURATION_MS, SECOND_CHANCE_OFFER_STATUS, SERVICE_ERROR_CODE, SUBMISSION_STATUS, TRANSACTION_OUTCOME, TRANSACTION_STATUS } from '../core/constants.js';
 import { validateSellerListing, validateSellerPhotos } from '../core/validation.js';
 import { config } from '../config.js';
 import { createPublishedSellerListing } from './listing-service.js';
@@ -215,6 +215,8 @@ export function createAuctionManagementService({ listingStates, transactionStore
             publishedAt: timestamp,
             status: SUBMISSION_STATUS.published,
             rejectionReason: '',
+            autoRelistCount: fields.automaticRelistCount
+                ?? ((source?.autoRelistCount || 0) + (fields.automatic === true ? 1 : 0)),
             startingBid: fields.startingBid,
             bidIncrement: fields.bidIncrement,
             buyNowPrice: fields.buyNowPrice,
@@ -226,11 +228,70 @@ export function createAuctionManagementService({ listingStates, transactionStore
         };
     }
 
+    function processAutomaticRelists() {
+        listingStates.forEach(listing => {
+            if (listing.source !== 'seller_submission' || listing.recoveryOnly || listing.secondChanceOffer
+                || transactionStore.isPaused(listing.id) || hasLiveSuccessor(listing) || !failedOutcome(listing)) return;
+            const transaction = transactionStore.get(listing.id);
+            const blockedFailures = [FAILURE_OUTCOME.sellerNoShow, FAILURE_OUTCOME.sellerCancelled,
+                FAILURE_OUTCOME.materialMismatch, FAILURE_OUTCOME.listingCorrectionRequired,
+                FAILURE_OUTCOME.sellerAvailabilityRequired, FAILURE_OUTCOME.blockedPendingReview];
+            if (blockedFailures.includes(transaction.failureOutcome)
+                || transaction.outcome === TRANSACTION_OUTCOME.materialMismatch
+                || transaction.status === TRANSACTION_STATUS.completed
+                || transaction.outcome === TRANSACTION_OUTCOME.successfulCompletion
+                || eligibleBidders(listing.id).length) return;
+            const submissions = loadSellerSubmissions();
+            const submission = submissions.find(item => item.id === listing.sellerSubmissionId);
+            const relistLimit = submission?.autoRelistLimit;
+            const lineageRelistCount = Math.max(0, ...submissions
+                .filter(item => item.sourceListingId === rootId(listing))
+                .map(item => item.autoRelistCount || 0));
+            if (![1, 3].includes(relistLimit) || lineageRelistCount >= relistLimit) return;
+            const nextSubmission = instanceFields(listing, {
+                startingBid: listing.startingBid,
+                bidIncrement: listing.bidIncrement,
+                buyNowPrice: listing.buyNowPrice,
+                reservePriceMode: listing.reservePriceMode,
+                reservePrice: listing.reservePrice,
+                auctionDurationHours: submission.auctionDurationHours || DEFAULT_AUCTION_DURATION_HOURS,
+                automatic: true,
+                automaticRelistCount: lineageRelistCount + 1
+            });
+            photoManager.copyImages(listing.sellerSubmissionId, nextSubmission.id);
+            if (!saveSubmission(nextSubmission, listing.images)) {
+                photoManager.releaseImage(nextSubmission.id);
+                return;
+            }
+            notificationService.create({
+                dedupeKey: `automatic-relist:${nextSubmission.id}`,
+                recipientUserId: listing.sellerUserId,
+                title: 'Auction automatically relisted',
+                message: `${listing.title} has a new linked auction instance. You can disable future automatic relists from your seller controls.`,
+                listingId: nextSubmission.listingId
+            });
+        });
+    }
+
     return {
         permissions,
         canUnpublish,
         eligibleBidders,
         offerStatus,
+        disableAutomaticRelists(listingId, userId = userService.getCurrentUser().id) {
+            const listing = listingStates.get(listingId);
+            if (!listing || listing.sellerUserId !== userId || listing.source !== 'seller_submission') {
+                return fail('Only the listing owner can change automatic relisting.');
+            }
+            const lineage = rootId(listing);
+            const submissions = loadSellerSubmissions();
+            const matching = submissions.filter(item => item.sellerUserId === userId
+                && (item.listingId === lineage || item.sourceListingId === lineage || item.relistedFrom === listingId));
+            if (!matching.length) return fail('The linked listing record is unavailable.');
+            matching.forEach(item => { item.autoRelistLimit = 0; });
+            if (!saveSellerSubmissions(submissions)) return fail('This browser could not save the relisting preference.', SERVICE_ERROR_CODE.storageFailed);
+            return { ok: true };
+        },
         getMismatchReason(listingId) {
             return transactionStore.get(listingId).mismatchReason;
         },
@@ -382,57 +443,10 @@ export function createAuctionManagementService({ listingStates, transactionStore
                 dedupeKey: `correction-submitted:${next.id}`,
                 recipientUserId: next.sellerUserId,
                 title: 'Corrected listing submitted',
-                message: 'The corrected version is awaiting Admin review. The earlier listing remains unavailable.',
-                listingId: listing.id
-            });
-            notificationService.create({
-                dedupeKey: `correction-review:${next.id}`,
-                recipientUserId: DEFAULT_DEMO_USER_ID,
-                title: 'Corrective review awaiting action',
-                message: `A corrected version of ${listing.title} is awaiting review.`,
+                message: 'Corrected version saved for prototype review; no Admin approval occurs in this public demo. The earlier listing remains unavailable.',
                 listingId: listing.id
             });
             return { ok: true, data: next };
-        },
-        reviewCorrection(submissionId, approve, reason = '') {
-            const submissions = loadSellerSubmissions();
-            const previousSubmissions = submissions.map(item => ({ ...item }));
-            const submission = submissions.find(item => item.id === submissionId
-                && item.status === SUBMISSION_STATUS.pendingReview && item.correctionOf);
-            if (!submission || typeof approve !== 'boolean'
-                || (!approve && (!reason.trim() || reason.trim().length > 200))) {
-                return fail('Corrective review is no longer available or needs a concise rejection reason.', SERVICE_ERROR_CODE.invalidInput);
-            }
-            const listingId = submission.correctionOf;
-            const nextStatus = approve ? SUBMISSION_STATUS.published : SUBMISSION_STATUS.rejected;
-            submission.status = nextStatus;
-            submission.rejectionReason = approve ? '' : reason.trim();
-            submission.publishedAt = approve ? new Date(now()).toISOString() : null;
-            if (approve) submission.auctionEndsAt = new Date(now() + (submission.auctionDurationHours || DEFAULT_AUCTION_DURATION_HOURS) * 3600000).toISOString();
-            const original = submissions.find(item => item.listingId === listingId);
-            if (original) {
-                original.recoveryStatus = approve ? FAILURE_OUTCOME.eligibleForSecondChance : FAILURE_OUTCOME.blockedPendingReview;
-                original.correctedListingId = submission.listingId;
-            }
-            if (!saveSellerSubmissions(submissions)) return fail('This browser could not save the review decision.', SERVICE_ERROR_CODE.storageFailed);
-            const outcome = transactionStore.updateFailureOutcome(listingId,
-                approve ? FAILURE_OUTCOME.eligibleForSecondChance : FAILURE_OUTCOME.blockedPendingReview,
-                { relistEligible: approve, failureReason: approve ? '' : reason.trim(), admin: true });
-            if (!outcome) {
-                saveSellerSubmissions(previousSubmissions);
-                return fail('This browser could not save the recovery decision.', SERVICE_ERROR_CODE.storageFailed);
-            }
-            const resolved = { status: nextStatus, submission, listingId: submission.listingId };
-            notificationService.create({
-                dedupeKey: `corrective-review:${submission.id}:${nextStatus}`,
-                recipientUserId: submission.sellerUserId,
-                title: approve ? 'Corrected listing approved' : 'Corrected listing rejected',
-                message: approve
-                    ? 'The corrected version passed completeness review. Eligible prior bidders are considered before relisting.'
-                    : `The corrected version is unavailable.${submission.rejectionReason ? ` ${submission.rejectionReason}` : ''}`,
-                listingId: submission.listingId
-            });
-            return { ok: true, data: resolved };
         },
         cancelAuction(listingId, reason = '') {
             if (!permissions(listingId).manage) return fail('This auction cannot be withdrawn now.');
@@ -489,15 +503,15 @@ export function createAuctionManagementService({ listingStates, transactionStore
             const transaction = biddingService.endAuction(listingId);
             return transaction ? { ok: true, data: transaction } : fail('This browser could not end the auction.');
         },
-        unpublish(listingId, { admin = false } = {}) {
-            if (!(admin ? canUnpublish(listingId) : permissions(listingId).unpublish)) return fail('Cannot unpublish a listing with bids, an offer, an issue, or a buyer.');
+        unpublish(listingId) {
+            if (!permissions(listingId).unpublish) return fail('Cannot unpublish a listing with bids, an offer, an issue, or a buyer.');
             const listing = listingStates.get(listingId);
             const submissions = loadSellerSubmissions();
             const submission = submissions.find(item => item.id === listing.sellerSubmissionId);
             if (!submission) return fail('Seller record not found.');
             submission.status = SUBMISSION_STATUS.unpublished;
             if (!saveSellerSubmissions(submissions)) return fail('This browser could not save the change.');
-            const withdrawn = transactionStore.withdrawSellerListing(listingId, { admin });
+            const withdrawn = transactionStore.withdrawSellerListing(listingId);
             if (!withdrawn) {
                 submission.status = SUBMISSION_STATUS.published;
                 saveSellerSubmissions(submissions);
@@ -552,7 +566,7 @@ export function createAuctionManagementService({ listingStates, transactionStore
             notificationService.create({
                 dedupeKey: `offer:${submission.id}:created`, recipientUserId: buyerUserId,
                 title: 'Second-chance offer',
-                message: `${listing.correctionOf ? 'Listing details were corrected after the previous transaction. ' : ''}Review the local offer for ${listing.title}, based on the recipient's last visible bid, and its current disclosures before accepting.`,
+                message: `${listing.correctionOf ? 'Listing details were corrected after the previous transaction. ' : ''}Review the local offer for ${listing.title}, based on your last visible bid, and its current disclosures before accepting.`,
                 listingId: submission.listingId
             });
             return { ok: true, data: listingStates.get(submission.listingId) };
@@ -605,6 +619,7 @@ export function createAuctionManagementService({ listingStates, transactionStore
                 if (listing.recoverySourceListingId || listing.secondChanceOffer) return;
                 notifyRelistWhenExhausted(listing.id);
             });
+            processAutomaticRelists();
         }
     };
 }

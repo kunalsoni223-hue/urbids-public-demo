@@ -154,8 +154,8 @@ export function createAuctionManagementUI({ documentRef = document, auctionManag
             startingBid: Number(input('edit-start').value),
             bidIncrement: Number(input('edit-increment').value),
             buyNowPrice: input('edit-buy').value === '' ? null : Number(input('edit-buy').value),
-            reservePrice: null,
-            reservePriceMode: RESERVE_PRICE_MODE.none,
+            reservePrice: listingStates.get(activeListingId)?.reservePrice ?? null,
+            reservePriceMode: listingStates.get(activeListingId)?.reservePriceMode ?? RESERVE_PRICE_MODE.none,
             auctionDurationHours: Number(input('edit-duration').value)
         };
         let result;

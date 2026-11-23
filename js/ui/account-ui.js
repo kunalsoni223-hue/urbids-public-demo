@@ -1,20 +1,21 @@
-import { AVATAR_COLORS, MEETUP_ATTENDANCE_STATUS, PROFILE_CONSTRAINTS, SERVICE_ERROR_CODE, USABILITY_EVENT_TYPE } from '../core/constants.js';
+import { AVATAR_COLORS, CATEGORY_LABELS, MEETUP_ATTENDANCE_STATUS, PROFILE_CONSTRAINTS, SERVICE_ERROR_CODE, USABILITY_EVENT_TYPE, USER_TYPE } from '../core/constants.js';
 import { formatCurrency, formatTimeRemaining } from '../core/formatting.js';
 import { deriveInitials } from '../core/validation.js';
 import { renderTransactionTimeline } from './transaction-timeline-ui.js';
+import { createAccountCreationDialog } from './account-creation-ui.js';
 
 const SECTIONS = ['activity', 'profile', 'details'];
 const SECTION_LABELS = { activity: 'My Activity', profile: 'Profile and reviews', details: 'Account details' };
 const ACTIVITY_TABS = [['overview', 'Overview'], ['buying', 'Buying'], ['selling', 'Selling'], ['watchlist', 'Watchlist'], ['history', 'History']];
 const BUYING_FILTERS = [['active', 'Active bids'], ['purchases', 'Won and purchases'], ['offers', 'Second-chance offers']];
-const SELLING_FILTERS = [['active', 'Active listings'], ['review', 'In review'], ['action', 'Needs seller action'], ['progress', 'Sale in progress'], ['sold', 'Sold']];
+const SELLING_FILTERS = [['drafts', 'Drafts'], ['active', 'Active listings'], ['review', 'In review'], ['action', 'Needs seller action'], ['progress', 'Sale in progress'], ['sold', 'Sold']];
 const WATCHLIST_FILTERS = [['all', 'All'], ['ending', 'Ending soon'], ['price', 'Price drops'], ['relisted', 'Relisted']];
 const WATCHLIST_FLAGS = { ending: 'Ending soon', price: 'Price changed', relisted: 'Relisted' };
 const HISTORY_FILTERS = [['all', 'All'], ['purchases', 'Purchases'], ['sales', 'Sales'], ['cancelled', 'Cancelled'], ['resolved', 'Resolved issues']];
 const REVIEW_FILTERS = [['all', 'All'], ['seller', 'As seller'], ['buyer', 'As buyer']];
 const UNAVAILABLE_CAPABILITIES = ['Email verification', 'Phone verification', 'Password', 'Government identification', 'KYC', 'Bank account', 'Payment methods', 'Payout details'];
 
-export function createAccountUI({ documentRef = document, state, activityService, profileService, engagementService, recordEvent = () => {}, onAction, onOpenListing, onRecordMeetupAttendance, onReportMeetupNoShow, onResumeBuyer, onProfileChanged }) {
+export function createAccountUI({ documentRef = document, state, activityService, profileService, engagementService, recordEvent = () => {}, localAccountService, dialogController, getPrototypeMode, onAccountChanged = () => {}, onDeleteLocalAccount, onAction, onOpenListing, onRecordMeetupAttendance, onReportMeetupNoShow, onResumeBuyer, onProfileChanged, getSellerDraft = () => null, onResumeSellerDraft = () => {}, onDeleteSellerDraft = () => {} }) {
     const { userService, listingStates } = state;
     const windowRef = documentRef.defaultView;
     const body = documentRef.body;
@@ -33,6 +34,38 @@ export function createAccountUI({ documentRef = document, state, activityService
     let renderedUserId = null;
     let detailsStatus = '';
     let afterLeave = null;
+
+    const accountCreationDialog = createAccountCreationDialog({
+        documentRef,
+        localAccountService,
+        dialogController,
+        recordEvent
+    });
+
+    function requiresAccount() {
+        return userService.getCurrentUserType() === USER_TYPE.guest;
+    }
+
+    function requireLocalAccount(action, returnFocus = documentRef.activeElement) {
+        if (!requiresAccount()) return true;
+        accountCreationDialog.show({
+            returnFocus,
+            onSuccess: () => {
+                onAccountChanged();
+                action?.();
+            }
+        });
+        return false;
+    }
+
+    function returnToLocalAccount(returnFocus = documentRef.activeElement) {
+        const account = localAccountService.getLastLocalUser();
+        if (!account || !userService.returnToLocalUser()) return false;
+        recordEvent(USABILITY_EVENT_TYPE.prototypeAccountRestored, { metadata: { interest: account.interest } });
+        onAccountChanged();
+        returnFocus?.focus?.({ preventScroll: true });
+        return true;
+    }
 
     function el(tag, className, text) {
         const node = documentRef.createElement(tag);
@@ -226,13 +259,25 @@ export function createAccountUI({ documentRef = document, state, activityService
     }
 
     function renderSelling(data, target) {
-        const sets = { active: data.selling.active, review: data.selling.inReview, action: data.selling.needsAction, progress: data.selling.inProgress, sold: data.selling.sold };
-        const empty = { active: 'No active listings.', review: 'No listings are in review.', action: 'No seller actions needed.', progress: 'No sales awaiting the buyer.', sold: 'No completed sales yet.' };
+        const draft = getSellerDraft();
+        const sets = { drafts: draft ? [draft] : [], active: data.selling.active, review: data.selling.inReview, action: data.selling.needsAction, progress: data.selling.inProgress, sold: data.selling.sold };
+        const empty = { drafts: 'No saved drafts.', active: 'No active listings.', review: 'No listings are in review.', action: 'No seller actions needed.', progress: 'No sales awaiting the buyer.', sold: 'No completed sales yet.' };
         const summary = data.sellerSummary;
-        target.append(el('p', 'account-summary', `${summary.activeListings} live · ${summary.soldItems} sold · ${summary.sellThroughRate}% auction sell-through · ${summary.averageRating.toFixed(1)} average rating`));
+        target.append(el('p', 'account-summary', `${summary.activeListings} live · ${summary.soldItems} sold · ${summary.sellThroughRate}% auction sell-through · ${summary.averageRating === null ? 'No rating' : `${summary.averageRating.toFixed(1)} average rating`}`));
         renderFiltered(SELLING_FILTERS, ui.selling, Object.fromEntries(Object.entries(sets).map(([id, rows]) => [id, rows.length])), 'selling',
             id => { ui.selling = id; render(); }, 'Selling views', target);
-        target.append(list(sets[ui.selling], empty[ui.selling]));
+        if (ui.selling === 'drafts') {
+            if (!draft) target.append(el('p', 'account-empty', empty.drafts));
+            else {
+                const item = el('article', 'account-card');
+                const values = draft.values || {};
+                item.append(el('strong', '', String(values.title || '').trim() || 'Untitled draft'));
+                item.append(el('p', 'activity-item-status', `${CATEGORY_LABELS[values.category] || 'Category not selected'} · Updated ${formatDate(draft.updatedAt)}`));
+                item.append(button('Resume', 'account-action', () => onResumeSellerDraft(draft)));
+                item.append(button('Delete', 'account-action', () => onDeleteSellerDraft(draft)));
+                target.append(item);
+            }
+        } else target.append(list(sets[ui.selling], empty[ui.selling]));
         if (ui.selling === 'action') {
             const questions = engagementService?.getNeedsSellerAction(userService.getCurrentUser().id) || [];
             if (questions.length) {
@@ -280,6 +325,10 @@ export function createAccountUI({ documentRef = document, state, activityService
     }
 
     function renderActivity() {
+        if (requiresAccount()) {
+            panel.replaceChildren(section('My Activity', el('p', 'account-empty', 'Create a browser-local prototype account to use personal Activity.')));
+            return;
+        }
         const data = activityService.getForUser(userService.getCurrentUser().id);
         panel.replaceChildren();
         const tablist = el('div', 'account-subtabs');
@@ -327,10 +376,13 @@ export function createAccountUI({ documentRef = document, state, activityService
         card.setAttribute('aria-label', 'Public profile');
         card.append(avatar(profile, 'account-avatar-large'));
         const copy = el('div', 'account-profile-copy');
-        copy.append(el('h2', '', profile.displayName), el('p', '', profile.location), el('p', '', `Member since ${profile.memberSince}`));
+        copy.append(el('h2', '', profile.displayName), el('p', '', profile.location),
+            el('p', '', profile.isNewMember ? 'New member' : profile.memberSince ? `Member since ${profile.memberSince}` : 'Prototype member'));
         card.append(copy);
         const facts = el('ul', 'account-chips');
-        facts.append(el('li', '', `★ ${profile.rating.toFixed(1)} average rating`), el('li', '', `${profile.completedTransactions} completed transactions`));
+        if (profile.isNewMember) facts.append(el('li', '', 'New member'));
+        else if (profile.rating !== null) facts.append(el('li', '', `★ ${profile.rating.toFixed(1)} average rating`));
+        facts.append(el('li', '', `${profile.completedTransactions} completed transactions`));
         if (profile.resolvedNoShows > 0) facts.append(el('li', '', `${profile.resolvedNoShows} resolved seller no-show${profile.resolvedNoShows === 1 ? '' : 's'}`));
         copy.append(facts);
         if (own) {
@@ -340,27 +392,31 @@ export function createAccountUI({ documentRef = document, state, activityService
 
         const reputation = el('section', 'account-section');
         reputation.append(el('h3', '', 'Reputation and reviews'));
-        const totals = el('p', 'account-summary', `★ ${summary.average.toFixed(1)} overall · ${summary.completedTransactions} completed transactions · ${summary.totalReviewCount} visible ${summary.totalReviewCount === 1 ? 'review' : 'reviews'}`);
+        const totals = el('p', 'account-summary', profile.isNewMember
+            ? 'New member · No rating or reviews yet.'
+            : `${summary.average === null ? 'No rating' : `★ ${summary.average.toFixed(1)} overall`} · ${summary.completedTransactions} completed transactions · ${summary.totalReviewCount} visible ${summary.totalReviewCount === 1 ? 'review' : 'reviews'}`);
         reputation.append(totals);
-        if (summary.isSample) reputation.append(el('p', 'account-note', 'Showing a sample of prototype reviews. Sample reviews are fictional and do not cover every completed transaction.'));
-        else reputation.append(el('p', 'account-note', 'Sample reviews are fictional prototype content.'));
-        const maxCount = Math.max(1, ...summary.distribution.map(entry => entry.count));
-        const distribution = el('ul', 'account-distribution');
-        distribution.setAttribute('aria-label', 'Rating distribution for the reviews shown');
-        summary.distribution.forEach(({ stars, count }) => {
-            const row = el('li');
-            const bar = el('span', 'account-meter');
-            bar.setAttribute('aria-hidden', 'true');
-            const fill = el('span', 'account-bar-fill');
-            fill.style.width = `${Math.round(count / maxCount * 100)}%`;
-            bar.append(fill);
-            row.append(el('span', 'account-bar-label', `${stars} ${stars === 1 ? 'star' : 'stars'}`), bar, el('span', 'account-bar-count', String(count)));
-            distribution.append(row);
-        });
-        reputation.append(distribution);
-        reputation.append(filterGroup('Filter reviews', REVIEW_FILTERS, filter, null, onReviewFilter, `${keyPrefix}-filter`));
-        reputation.append(el('p', 'account-card-status', `${summary.reviewCount} ${summary.reviewCount === 1 ? 'review' : 'reviews'} shown`));
-        reputation.append(list(summary.reviews, 'No reviews for this filter yet.', review => {
+        if (!profile.isNewMember) {
+            if (summary.isSample) reputation.append(el('p', 'account-note', 'Showing fictional prototype sample reviews.'));
+            else reputation.append(el('p', 'account-note', 'Sample reviews are fictional prototype content.'));
+            const maxCount = Math.max(1, ...summary.distribution.map(entry => entry.count));
+            const distribution = el('ul', 'account-distribution');
+            distribution.setAttribute('aria-label', 'Rating distribution for the reviews shown');
+            summary.distribution.forEach(({ stars, count }) => {
+                const row = el('li');
+                const bar = el('span', 'account-meter');
+                bar.setAttribute('aria-hidden', 'true');
+                const fill = el('span', 'account-bar-fill');
+                fill.style.width = `${Math.round(count / maxCount * 100)}%`;
+                bar.append(fill);
+                row.append(el('span', 'account-bar-label', `${stars} ${stars === 1 ? 'star' : 'stars'}`), bar, el('span', 'account-bar-count', String(count)));
+                distribution.append(row);
+            });
+            reputation.append(distribution);
+            reputation.append(filterGroup('Filter reviews', REVIEW_FILTERS, filter, null, onReviewFilter, `${keyPrefix}-filter`));
+            reputation.append(el('p', 'account-card-status', `${summary.reviewCount} ${summary.reviewCount === 1 ? 'review' : 'reviews'} shown`));
+        }
+        reputation.append(list(summary.reviews, 'No reviews yet.', review => {
             const item = el('li', 'account-card review-card');
             const stars = el('p', 'review-stars', `${'★'.repeat(review.score)}${'☆'.repeat(5 - review.score)}`);
             stars.setAttribute('aria-label', `${review.score} out of 5 stars`);
@@ -394,6 +450,25 @@ export function createAccountUI({ documentRef = document, state, activityService
     }
 
     function renderDetailsSection() {
+        if (requiresAccount()) {
+            panel.replaceChildren(section('Browser-local prototype account', el('p', 'account-empty', 'Browsing does not require an account. Create one only when you want to save activity or take an identity-dependent action.')));
+            const createButton = button('Create account', 'primary-button', () => accountCreationDialog.show({
+                returnFocus: documentRef.activeElement,
+                onSuccess: onAccountChanged
+            }));
+            if (localAccountService.getLastLocalUser()) {
+                panel.append(button('Return to local account', 'secondary-button', () => {
+                    if (!returnToLocalAccount(documentRef.activeElement)) {
+                        announce('The saved local account could not be restored. Check browser storage.');
+                        return;
+                    }
+                    render({ force: true });
+                    heading.focus({ preventScroll: true });
+                }));
+            }
+            panel.append(createButton, button('Continue browsing', 'secondary-button', () => returnToMarketplace()));
+            return;
+        }
         const user = userService.getCurrentUser();
         panel.replaceChildren();
         renderedUserId = user.id;
@@ -425,9 +500,8 @@ export function createAccountUI({ documentRef = document, state, activityService
         const initialsPreview = el('p', 'account-hint', `Initials: ${user.initials} (derived from the display name)`);
         const localitySelect = el('select');
         localitySelect.id = 'account-locality';
-        const base = userService.getBaseUser(user.id);
         const localityValue = user.location.replace(', Mumbai', '');
-        userService.getLocalityOptions(base.id).forEach(name => {
+        userService.getLocalityOptions(user.id).forEach(name => {
             const option = el('option', '', name);
             option.value = name;
             option.selected = name === localityValue;
@@ -503,7 +577,10 @@ export function createAccountUI({ documentRef = document, state, activityService
         form.addEventListener('input', () => { detailsStatus = ''; });
 
         const readOnly = el('dl', 'account-fields account-readonly');
-        [['Member since', String(user.memberSince)], ['Account status', 'Research prototype profile']].forEach(([term, value]) => {
+        const isLocalAccount = userService.getCurrentUserType() === USER_TYPE.local;
+        [['Stable user ID', user.id], ['Member since', String(user.memberSince)], [
+            'Account status', isLocalAccount ? 'Prototype account • Stored only in this browser' : 'Fictional demo profile'
+        ]].forEach(([term, value]) => {
             const group = el('div');
             group.append(el('dt', '', term), el('dd', '', value));
             readOnly.append(group);
@@ -519,6 +596,41 @@ export function createAccountUI({ documentRef = document, state, activityService
             section('Read-only', readOnly),
             section('Not available in this prototype', unavailable)
         );
+        if (isLocalAccount) {
+            const accountControls = section('Prototype account controls', el('p', 'account-note',
+                'This is not real authentication. Leaving preserves this browser’s account data.'));
+            accountControls.append(
+                button('Leave prototype account', 'secondary-button', () => {
+                    if (!userService.leaveLocalUser()) {
+                        announce('The prototype account could not be left. Check browser storage.');
+                        return;
+                    }
+                    recordEvent(USABILITY_EVENT_TYPE.prototypeAccountLeft, { metadata: { interest: user.interest } });
+                    detailsStatus = '';
+                    onAccountChanged();
+                    render({ force: true });
+                    announce('You left the prototype account. Its local data is preserved.');
+                }),
+                button('Delete my prototype account data', 'secondary-button', () => {
+                    const confirmed = windowRef.confirm('This removes this prototype account and its local activity from this browser. It cannot be undone.');
+                    if (!confirmed) return;
+                    const account = localAccountService.getLocalUser(user.id);
+                    const deleted = onDeleteLocalAccount
+                        ? onDeleteLocalAccount(user.id)
+                        : (userService.removeLocalWatchlist(user.id) && localAccountService.deleteLocalAccount(user.id));
+                    if (!deleted) {
+                        announce('The account could not be fully deleted. Some local records may remain; check browser storage.');
+                        return;
+                    }
+                    recordEvent(USABILITY_EVENT_TYPE.prototypeAccountDeleted, { metadata: { interest: account?.interest } });
+                    detailsStatus = '';
+                    onAccountChanged();
+                    render({ force: true });
+                    announce('The prototype account was deleted. Historical activity remains in this browser where needed.');
+                })
+            );
+            panel.append(accountControls);
+        }
     }
 
     function renderPublic() {
@@ -644,6 +756,10 @@ export function createAccountUI({ documentRef = document, state, activityService
     }
 
     function openAccount(section = 'activity', trigger = null) {
+        if (section === 'activity' && requiresAccount()) {
+            requireLocalAccount(() => openAccount(section, trigger), trigger || documentRef.activeElement);
+            return;
+        }
         if (view === 'marketplace' && trigger) returnTarget = trigger;
         ui.section = SECTIONS.includes(section) ? section : 'activity';
         if (ui.section === 'details') detailsStatus = '';
@@ -713,5 +829,17 @@ export function createAccountUI({ documentRef = document, state, activityService
         openAccount(match[1]);
     }
 
-    return { render, openAccount, openFromLocation, openPublicProfile, closeAccount: returnToMarketplace, getView: () => view };
+    return {
+        render,
+        openAccount,
+        openFromLocation,
+        openPublicProfile,
+        closeAccount: returnToMarketplace,
+        getView: () => view,
+        requireLocalAccount,
+        showAccountCreation(returnFocus = documentRef.activeElement) {
+            accountCreationDialog.show({ returnFocus, onSuccess: onAccountChanged });
+        },
+        returnToLocalAccount
+    };
 }

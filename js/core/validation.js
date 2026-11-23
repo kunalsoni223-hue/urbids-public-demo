@@ -5,6 +5,7 @@ import {
     DEFAULT_AUCTION_DURATION_HOURS,
     FULFILMENT_METHOD,
     LISTING_FORMAT,
+    LEGACY_AUCTION_DURATION_OPTIONS_HOURS,
     SPECIFICATION_FIELDS_BY_SUBCATEGORY,
     RESERVE_PRICE_MODE,
     SUBCATEGORIES_BY_CATEGORY,
@@ -46,7 +47,8 @@ export function validateSellerListing(submission) {
     const validSpecifications = submission.specifications === undefined
         || (submission.specifications !== null && typeof submission.specifications === 'object' && !Array.isArray(submission.specifications));
     const duration = submission.auctionDurationHours ?? DEFAULT_AUCTION_DURATION_HOURS;
-    const validAuctionDuration = AUCTION_DURATION_OPTIONS_HOURS.includes(duration);
+    const validAuctionDuration = AUCTION_DURATION_OPTIONS_HOURS.includes(duration)
+        || LEGACY_AUCTION_DURATION_OPTIONS_HOURS.includes(duration);
     const reserveMode = submission.reservePriceMode ?? RESERVE_PRICE_MODE.none;
     const reservePrice = submission.reservePrice ?? null;
     const validReservePrice = reserveMode === RESERVE_PRICE_MODE.none
@@ -57,11 +59,17 @@ export function validateSellerListing(submission) {
             && reservePrice <= config.auctionRules.maximumListingPrice;
     const validPriceLimit = submission.startingBid <= config.auctionRules.maximumListingPrice
         && (submission.buyNowPrice === null || submission.buyNowPrice <= config.auctionRules.maximumListingPrice);
-    const requiredText = ['title', 'brandModel', 'description', 'location'];
-    const hasRequiredText = requiredText.every(key => typeof submission[key] === 'string' && submission[key].trim().length > 0);
+    const requiredText = ['title', 'description', 'location'];
+    const categoryNeedsBrand = submission.category === CATEGORY.electronics
+        || submission.category === CATEGORY.homeAppliances
+        || (submission.category === CATEGORY.fashion && ['sneakers', 'bags', 'accessories'].includes(submission.subcategory));
+    const hasRequiredText = requiredText.every(key => typeof submission[key] === 'string' && submission[key].trim().length > 0)
+        && (!categoryNeedsBrand || (typeof submission.brandModel === 'string' && submission.brandModel.trim().length > 0));
+    const validTextLengths = typeof submission.title === 'string' && submission.title.trim().length <= 60
+        && typeof submission.description === 'string' && submission.description.trim().length <= 2000;
 
     return {
-        valid: validCategory && validSubcategory && validCondition && validListingFormat && validStartingBid && validBidIncrement && validBuyNowPrice && validFulfilmentMethod && validSpecifications && validAuctionDuration && validReservePrice && validPriceLimit && hasRequiredText,
+        valid: validCategory && validSubcategory && validCondition && validListingFormat && validStartingBid && validBidIncrement && validBuyNowPrice && validFulfilmentMethod && validSpecifications && validAuctionDuration && validReservePrice && validPriceLimit && hasRequiredText && validTextLengths,
         validBidIncrement,
         validCategory,
         validSubcategory,
@@ -74,7 +82,8 @@ export function validateSellerListing(submission) {
         validAuctionDuration,
         validReservePrice,
         validPriceLimit,
-        hasRequiredText
+        hasRequiredText,
+        validTextLengths
     };
 }
 
@@ -110,7 +119,7 @@ export function validateInspection(checks) {
     return Array.isArray(checks) && checks.length > 0 && checks.every(check => check === true);
 }
 
-export function validateSellerPhotos(files, maximumCount = 5) {
+export function validateSellerPhotos(files, maximumCount = 10) {
     if (files.length > maximumCount) return { valid: false, reason: 'too_many' };
     if (files.some(file => !file.type.startsWith('image/'))) return { valid: false, reason: 'not_images' };
     return { valid: true };

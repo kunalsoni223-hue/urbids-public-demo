@@ -1,8 +1,9 @@
 import { config } from '../config.js';
 import {
     AUCTION_DURATION_OPTIONS_HOURS,
+    ALL_SUPPORTED_AUCTION_DURATION_OPTIONS_HOURS,
     DEFAULT_AUCTION_DURATION_HOURS,
-    REJECTION_REASON,
+    CONDITION_GRADE_LABELS,
     DEFAULT_SUBCATEGORY_BY_CATEGORY,
     DEFAULT_DEMO_USER_ID,
     FAILURE_OUTCOME,
@@ -17,11 +18,9 @@ import {
     SUBMISSION_STATUS,
 } from '../core/constants.js';
 import { readArray, readRecord, writeJSON } from '../core/storage.js';
-import { isRecord, isStableId, normalizeBidIncrement, normalizeFulfilmentMethod, normalizeSpecifications, normalizeTimestamp, uniqueRecords } from '../core/normalization.js';
+import { isPrototypeUserId, isRecord, isStableId, normalizeBidIncrement, normalizeFulfilmentMethod, normalizeSpecifications, normalizeTimestamp, uniqueRecords } from '../core/normalization.js';
 import { isValidSubcategory, validatePilotSellerListing, validateSellerListing } from '../core/validation.js';
-import { isDemoUserId } from '../data/demo-users.js';
 
-const validRejectionReasons = new Set(Object.values(REJECTION_REASON));
 const validStatuses = new Set(Object.values(SUBMISSION_STATUS));
 
 export function saveSellerSubmissions(submissions) {
@@ -39,18 +38,23 @@ export function loadSellerSubmissions() {
         submission.listingId = `${SELLER_LISTING_ID_PREFIX}${submission.id}`;
         submission.bidIncrement = normalizeBidIncrement(submission.bidIncrement,
             savedBids[submission.listingId]?.currentBid ?? submission.startingBid);
-        ['title', 'brandModel', 'description', 'location', 'rejectionReason'].forEach(field => {
+        ['title', 'brandModel', 'description', 'location', 'sellerName', 'rejectionReason'].forEach(field => {
             if (typeof submission[field] !== 'string') submission[field] = '';
         });
         ['sourceListingId', 'relistedFrom', 'correctionOf', 'recoverySourceListingId', 'correctedListingId'].forEach(field => {
             submission[field] = isStableId(submission[field]) ? submission[field] : null;
         });
+        if ('scenarioId' in submission) {
+            delete submission.scenarioId;
+            changed = true;
+        }
         submission.correctionReason = typeof submission.correctionReason === 'string' ? submission.correctionReason.slice(0, 200) : '';
         submission.correctionChanges = Array.isArray(submission.correctionChanges)
             ? submission.correctionChanges.filter(field => typeof field === 'string').slice(0, 20) : [];
         submission.recoveryStatus = Object.values(FAILURE_OUTCOME).includes(submission.recoveryStatus)
             ? submission.recoveryStatus : null;
         submission.sellerAcknowledged = submission.sellerAcknowledged === true;
+        submission.meetAndInspectAvailable = submission.meetAndInspectAvailable !== false;
         submission.recoveryOnly = submission.recoveryOnly === true;
         ['submittedAt', 'priceChangedAt'].forEach(field => {
             submission[field] = normalizeTimestamp(submission[field]);
@@ -70,21 +74,29 @@ export function loadSellerSubmissions() {
             submission.listingFormat = LISTING_FORMAT.auction;
         }
         submission.photoCount = Number.isInteger(submission.photoCount) && submission.photoCount >= 0
-            && submission.photoCount <= 5 ? submission.photoCount : null;
+            && submission.photoCount <= 10 ? submission.photoCount : null;
+        submission.sellerAcknowledged = submission.sellerAcknowledged === true;
+        submission.autoRelistLimit = [1, 3].includes(submission.autoRelistLimit) ? submission.autoRelistLimit : 0;
+        submission.autoRelistCount = Number.isSafeInteger(submission.autoRelistCount) && submission.autoRelistCount >= 0
+            ? submission.autoRelistCount : 0;
+        submission.sellerReference = typeof submission.sellerReference === 'string'
+            ? submission.sellerReference.replace(/<[^>]*>/g, '').slice(0, 40) : '';
+        submission.conditionLabel = ['Like new', 'Excellent', 'Good', 'Fair', 'Defective'].includes(submission.conditionLabel)
+            ? submission.conditionLabel : CONDITION_GRADE_LABELS[submission.condition] || '';
         if (submission.secondChanceOffer != null) {
             const offer = isRecord(submission.secondChanceOffer) ? submission.secondChanceOffer : {};
-            const validOffer = isDemoUserId(offer.buyerUserId) && offer.buyerUserId !== submission.sellerUserId
+            const validOffer = isPrototypeUserId(offer.buyerUserId) && offer.buyerUserId !== submission.sellerUserId
                 && Number.isSafeInteger(offer.price) && offer.price > 0 && normalizeTimestamp(offer.expiresAt)
                 && Object.values(SECOND_CHANCE_OFFER_STATUS).includes(offer.status);
             // Keep corrupt private offers private and non-actionable.
             submission.secondChanceOffer = {
-                buyerUserId: isDemoUserId(offer.buyerUserId) ? offer.buyerUserId : null,
+                buyerUserId: isPrototypeUserId(offer.buyerUserId) ? offer.buyerUserId : null,
                 price: validOffer ? offer.price : null,
                 status: validOffer ? offer.status : SECOND_CHANCE_OFFER_STATUS.expired,
                 expiresAt: validOffer ? offer.expiresAt : null
             };
         } else submission.secondChanceOffer = null;
-        if (!AUCTION_DURATION_OPTIONS_HOURS.includes(submission.auctionDurationHours)) {
+        if (!ALL_SUPPORTED_AUCTION_DURATION_OPTIONS_HOURS.includes(submission.auctionDurationHours)) {
             submission.auctionDurationHours = DEFAULT_AUCTION_DURATION_HOURS;
             changed = true;
         }
@@ -116,7 +128,7 @@ export function loadSellerSubmissions() {
                 changed = true;
             }
         }
-        if (!isDemoUserId(submission.sellerUserId)) {
+        if (!isPrototypeUserId(submission.sellerUserId)) {
             submission.sellerUserId = DEFAULT_DEMO_USER_ID;
             changed = true;
         }
@@ -131,6 +143,31 @@ export function loadSellerSubmissions() {
     return submissions;
 }
 
+export function loadSellerDraft(userId) {
+    if (!isPrototypeUserId(userId)) return null;
+    const drafts = readRecord(STORAGE_KEYS.sellerDrafts);
+    const draft = drafts[userId];
+    return isRecord(draft) ? { ...draft, values: isRecord(draft.values) ? draft.values : {} } : null;
+}
+
+export function saveSellerDraft(userId, values, now = new Date()) {
+    if (!isPrototypeUserId(userId) || !isRecord(values)) return { ok: false, code: SERVICE_ERROR_CODE.invalidInput };
+    const drafts = readRecord(STORAGE_KEYS.sellerDrafts);
+    const draft = { userId, values, updatedAt: now.toISOString() };
+    drafts[userId] = draft;
+    if (!writeJSON(STORAGE_KEYS.sellerDrafts, drafts)) return { ok: false, code: SERVICE_ERROR_CODE.storageFailed };
+    return { ok: true, draft };
+}
+
+export function deleteSellerDraft(userId) {
+    if (!isPrototypeUserId(userId)) return { ok: false, code: SERVICE_ERROR_CODE.invalidInput };
+    const drafts = readRecord(STORAGE_KEYS.sellerDrafts);
+    if (!Object.hasOwn(drafts, userId)) return { ok: true };
+    delete drafts[userId];
+    if (!writeJSON(STORAGE_KEYS.sellerDrafts, drafts)) return { ok: false, code: SERVICE_ERROR_CODE.storageFailed };
+    return { ok: true };
+}
+
 export function createSellerSubmission(fields, now = new Date(), random = Math.random) {
     const validation = validateSellerListing(fields);
     validation.validBidIncrement = config.sellerBidIncrements.includes(fields.bidIncrement);
@@ -142,6 +179,7 @@ export function createSellerSubmission(fields, now = new Date(), random = Math.r
     if (!pilotValidation.valid) return { ok: false, code: SERVICE_ERROR_CODE.invalidInput, validation: pilotValidation };
 
     const id = `${now.getTime()}-${random().toString(36).slice(2)}`;
+    if (!isPrototypeUserId(fields.sellerUserId)) return { ok: false, code: SERVICE_ERROR_CODE.invalidInput };
     const submission = {
         id,
         listingId: `${SELLER_LISTING_ID_PREFIX}${id}`,
@@ -149,13 +187,17 @@ export function createSellerSubmission(fields, now = new Date(), random = Math.r
         brandModel: fields.brandModel.trim(),
         category: fields.category,
         subcategory: fields.subcategory,
-        sellerUserId: isDemoUserId(fields.sellerUserId) ? fields.sellerUserId : DEFAULT_DEMO_USER_ID,
+        sellerUserId: fields.sellerUserId,
+        sellerName: typeof fields.sellerName === 'string' ? fields.sellerName.trim().slice(0, 60) : '',
         fulfilmentMethod: normalizeFulfilmentMethod(fields.fulfilmentMethod),
+        meetAndInspectAvailable: fields.meetAndInspectAvailable !== false,
         specifications: { ...normalizeSpecifications(fields.specifications) },
-        photoCount: Number.isSafeInteger(fields.photoCount) && fields.photoCount >= 0 && fields.photoCount <= 5
+        photoCount: Number.isSafeInteger(fields.photoCount) && fields.photoCount >= 0 && fields.photoCount <= 10
             ? fields.photoCount
             : 0,
         condition: fields.condition,
+        conditionLabel: ['Like new', 'Excellent', 'Good', 'Fair', 'Defective'].includes(fields.conditionLabel)
+            ? fields.conditionLabel : CONDITION_GRADE_LABELS[fields.condition] || '',
         description: fields.description.trim(),
         location: fields.location.trim(),
         estimatedValue: Number.isSafeInteger(fields.estimatedValue) ? fields.estimatedValue : null,
@@ -165,6 +207,10 @@ export function createSellerSubmission(fields, now = new Date(), random = Math.r
         bidIncrement: fields.bidIncrement,
         buyNowPrice: fields.buyNowPrice,
         auctionDurationHours: fields.auctionDurationHours,
+        sellerAcknowledged: fields.sellerAcknowledged === true,
+        autoRelistLimit: [1, 3].includes(fields.autoRelistLimit) ? fields.autoRelistLimit : 0,
+        autoRelistCount: 0,
+        sellerReference: typeof fields.sellerReference === 'string' ? fields.sellerReference.replace(/<[^>]*>/g, '').slice(0, 40) : '',
         reservePriceMode: fields.reservePriceMode,
         reservePrice: fields.reservePrice,
         status: SUBMISSION_STATUS.pendingReview,
@@ -178,12 +224,14 @@ export function createSellerSubmission(fields, now = new Date(), random = Math.r
 }
 
 export function removeSellerSubmissionsForUser(userId) {
-    if (!isDemoUserId(userId)) return { ok: false, code: SERVICE_ERROR_CODE.invalidInput };
+    if (!isPrototypeUserId(userId)) return { ok: false, code: SERVICE_ERROR_CODE.invalidInput };
     const submissions = loadSellerSubmissions();
     const removed = submissions.filter(submission => submission?.sellerUserId === userId);
-    if (!removed.length) return { ok: true, data: [] };
-    const next = submissions.filter(submission => submission?.sellerUserId !== userId);
-    if (!saveSellerSubmissions(next)) return { ok: false, code: SERVICE_ERROR_CODE.storageFailed };
+    if (removed.length) {
+        const next = submissions.filter(submission => submission?.sellerUserId !== userId);
+        if (!saveSellerSubmissions(next)) return { ok: false, code: SERVICE_ERROR_CODE.storageFailed };
+    }
+    if (!deleteSellerDraft(userId).ok) return { ok: false, code: SERVICE_ERROR_CODE.storageFailed };
     return { ok: true, data: removed };
 }
 
@@ -203,28 +251,18 @@ export function getSubmissionQualityChecklist(submission) {
     ];
 }
 
-export function transitionSubmissionStatus(submissionId, nextStatus, rejectionReason = '', now = new Date(), notificationService = null) {
+export function resetSellerRecoveryForListing(listingId) {
+    if (!isStableId(listingId)) return { ok: false, code: SERVICE_ERROR_CODE.invalidInput };
     const submissions = loadSellerSubmissions();
-    const submission = submissions.find(item => item && item.id === submissionId);
-    if (!submission) return null;
-
-    if (nextStatus === SUBMISSION_STATUS.published && submission.status === SUBMISSION_STATUS.pendingReview) {
-        const publishedAt = now.toISOString();
-        submission.status = SUBMISSION_STATUS.published;
-        submission.listingId = `${SELLER_LISTING_ID_PREFIX}${submission.id}`;
-        submission.publishedAt = publishedAt;
-        submission.auctionEndsAt = new Date(now.getTime() + submission.auctionDurationHours * 60 * 60 * 1000).toISOString();
-        submission.rejectionReason = '';
-    } else if (nextStatus === SUBMISSION_STATUS.rejected && submission.status === SUBMISSION_STATUS.pendingReview
-        && (!rejectionReason || validRejectionReasons.has(rejectionReason))) {
-        submission.status = SUBMISSION_STATUS.rejected;
-        submission.rejectionReason = rejectionReason;
-    } else {
-        return null;
+    const removed = submissions.filter(submission => (
+        submission.correctionOf === listingId || submission.recoverySourceListingId === listingId
+    ));
+    const next = submissions.filter(submission => !removed.includes(submission));
+    const original = next.find(submission => submission.listingId === listingId);
+    if (original) {
+        delete original.recoveryStatus;
+        delete original.correctedListingId;
     }
-
-    if (!saveSellerSubmissions(submissions)) return null;
-    const result = { submission, listingId: `${SELLER_LISTING_ID_PREFIX}${submission.id}`, status: submission.status };
-    notificationService?.notifySubmissionReview(submission, result.listingId);
-    return result;
+    if ((!removed.length && !original) || saveSellerSubmissions(next)) return { ok: true, data: removed };
+    return { ok: false, code: SERVICE_ERROR_CODE.storageFailed };
 }

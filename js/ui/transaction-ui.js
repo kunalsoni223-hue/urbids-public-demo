@@ -29,6 +29,7 @@ export function createTransactionUI({ documentRef = document, config, state, bid
     let activeShippingListingId = null;
     let activeFulfilmentContext = null;
     let reportIssueHandler = () => {};
+    let accountGate = () => true;
 
     function getTransaction(listingId) {
         return transactionStore.get(listingId);
@@ -90,46 +91,26 @@ export function createTransactionUI({ documentRef = document, config, state, bid
         } else {
             activeFulfilmentContext = context;
             documentRef.getElementById('fulfilment-choice-item').textContent = listing.title;
-
-            // Clear previous state
+            documentRef.getElementById('choose-meetup').hidden = listing.meetAndInspectAvailable === false;
+            const simpleAllowed = transactionStore.canSelectSimpleCollection(context.listingId);
+            documentRef.getElementById('choose-simple-collection').hidden = !simpleAllowed;
+            documentRef.getElementById('simple-collection-error')?.remove();
             documentRef.getElementById('fulfilment-choice-error').textContent = '';
             documentRef.getElementById('simple-collection-decline').checked = false;
-            documentRef.querySelectorAll('input[name="fulfilment"]').forEach(r => { r.checked = false; });
-
-            // Update handover stages
-            const handoverStages = documentRef.querySelectorAll('.handover-stages li');
-            handoverStages.forEach(stage => {
-                if (stage.dataset.stage === 'handover') {
-                    stage.setAttribute('aria-current', 'step');
-                }
-            });
-
-            // Show/hide options based on configuration
-            const simpleAllowed = transactionStore.canSelectSimpleCollection(context.listingId);
-            documentRef.querySelector('input[value="simple"]').parentElement.parentElement.hidden = !simpleAllowed;
-
-            // Show meetup recommendation if technical inspection needed
             const technical = transactionStore.getInspectionReview(context.listingId)?.level === 'Technical';
-            const meetupRec = documentRef.getElementById('meetup-recommendation');
-            if (technical) {
-                meetupRec.hidden = false;
-                documentRef.querySelector('input[value="meetup"]').parentElement.style.borderColor = '#d4a574';
-            } else {
-                meetupRec.hidden = true;
-            }
-
-            // Show inspection warning if needed
+            const warning = technical
+                ? 'Inspection recommended. Continuing without inspection may limit mismatch claims to issues that could not reasonably have been identified at handover.'
+                : 'Simple collection is available for this item. Confirm receipt here before completion.';
+            documentRef.getElementById('simple-collection-warning').textContent = `${warning} Prototype policy wording, not legal advice.`;
             documentRef.getElementById('simple-collection-decline-label').hidden = !technical;
-
-            // Hide shipping if not both
-            documentRef.querySelector('input[value="shipping"]').parentElement.parentElement.hidden = method !== FULFILMENT_METHOD.both;
-
+            documentRef.getElementById('choose-shipping').hidden = method !== FULFILMENT_METHOD.both;
             if (sourceDialog?.open) dialogController.transition(sourceDialog, fulfilmentChoiceDialog);
             else dialogController.open(fulfilmentChoiceDialog, sourceDialog);
         }
     }
 
-    function openBuyNow(listingId, source) {
+    function openBuyNow(listingId, source, returnFocus = source?.open ? documentRef.activeElement : source) {
+        if (accountGate(() => openBuyNow(listingId, source, returnFocus), returnFocus || documentRef.activeElement) === false) return;
         const listing = listingStates.get(listingId);
         if (!listing || !biddingService.isBuyNowAvailable(listingId)) return;
 
@@ -169,41 +150,28 @@ export function createTransactionUI({ documentRef = document, config, state, bid
         documentRef.getElementById('auction-winning-bid').textContent = `Winning bid: ${formatCurrency(transaction.winningBid)}`;
         const amount = transaction.depositAmount || reservationDeposit(transaction.transactionPrice);
         documentRef.getElementById('auction-commitment-note').textContent = depositExplanation(amount);
-
-        // Update deadline visibility and content
-        const deadlineEl = documentRef.getElementById('auction-winner-deadline');
-        if (transaction.winnerResponseDeadline && transaction.status === TRANSACTION_STATUS.auctionWon) {
-            deadlineEl.textContent = `Confirm by ${new Date(transaction.winnerResponseDeadline).toLocaleString()}.`;
-            deadlineEl.hidden = false;
-        } else {
-            deadlineEl.hidden = true;
-        }
-
-        // Update journey stages based on transaction status
-        const stages = documentRef.querySelectorAll('.winner-journey-stages li');
-        stages.forEach(stage => {
-            const stageType = stage.dataset.stage;
-            if (stageType === 'confirm') {
-                if (transaction.status === TRANSACTION_STATUS.auctionWon) {
-                    stage.setAttribute('aria-current', 'step');
-                    stage.dataset.state = 'current';
-                } else {
-                    stage.removeAttribute('aria-current');
-                    stage.dataset.state = 'complete';
-                }
-            } else if (stageType === 'handover') {
-                stage.dataset.state = transaction.status !== TRANSACTION_STATUS.auctionWon ? 'current' : 'pending';
-            } else if (stageType === 'complete') {
-                stage.dataset.state = 'pending';
-            }
-        });
-
+        documentRef.getElementById('auction-winner-deadline').textContent = transaction.winnerResponseDeadline
+            ? `Confirm by ${new Date(transaction.winnerResponseDeadline).toLocaleString()}.`
+            : '';
         documentRef.getElementById('continue-auction-booking-token').hidden = false;
         documentRef.getElementById('decline-auction-win').hidden = transaction.status !== TRANSACTION_STATUS.auctionWon;
         documentRef.getElementById('continue-auction-booking-token').textContent = transaction.status === TRANSACTION_STATUS.tokenCompleted
             ? 'Choose handover'
             : 'Confirm purchase';
         dialogController.open(winnerDialog, returnFocus);
+    }
+
+    function simulateAuctionEnd(listingId, returnFocus) {
+        const transaction = biddingService.endAuction(listingId);
+        if (!transaction) return;
+        renderListings();
+        showWinnerDialog(listingId, returnFocus);
+    }
+
+    function resetDemoTransaction(listingId) {
+        if (!transactionStore.reset(listingId)) return;
+        if (activeWinnerListingId === listingId) dialogController.close(winnerDialog);
+        renderListings();
     }
 
     function resolveMeetup(listingId) {
@@ -492,44 +460,43 @@ export function createTransactionUI({ documentRef = document, config, state, bid
         documentRef.getElementById('buy-now-done').addEventListener('click', () => dialogController.close(buyNowDialog));
         buyNowDialog.addEventListener('close', () => { activeBuyNowListingId = null; activeBookingContext = null; });
 
-        documentRef.getElementById('confirm-fulfilment-choice').addEventListener('click', () => {
+        documentRef.getElementById('choose-meetup').addEventListener('click', () => {
             const context = activeFulfilmentContext;
-            if (!context) return;
-
-            const selected = documentRef.querySelector('input[name="fulfilment"]:checked')?.value;
-            if (!selected) {
-                documentRef.getElementById('fulfilment-choice-error').textContent = 'Please choose how to exchange the item.';
-                return;
-            }
-
-            const technical = transactionStore.getInspectionReview(context.listingId)?.level === 'Technical';
-
-            if (selected === 'simple') {
-                if (technical && !documentRef.getElementById('simple-collection-decline').checked) {
-                    documentRef.getElementById('fulfilment-choice-error').textContent = 'Confirm that you understand the inspection recommendation before continuing.';
-                    documentRef.getElementById('simple-collection-decline').focus();
-                    return;
-                }
-                const transaction = transactionStore.requestSimpleCollection(context.listingId, {
-                    declinedInspection: documentRef.getElementById('simple-collection-decline').checked
-                });
-                if (!transaction) {
-                    documentRef.getElementById('fulfilment-choice-error').textContent = 'Simple collection is not available for this item.';
-                    return;
-                }
-                recordEvent(USABILITY_EVENT_TYPE.fulfilmentSelected, { relatedId: context.listingId, metadata: { fulfilment: 'simple_collection' } });
-                activeFulfilmentContext = null;
-                renderListings();
-                openHandover(context.listingId, fulfilmentChoiceDialog);
-            } else if (selected === 'meetup') {
+            activeFulfilmentContext = null;
+            if (context) {
                 recordEvent(USABILITY_EVENT_TYPE.fulfilmentSelected, { relatedId: context.listingId, metadata: { fulfilment: 'in_person' } });
                 openMeetupForm(context, fulfilmentChoiceDialog);
-            } else if (selected === 'shipping') {
+            }
+        });
+        documentRef.getElementById('choose-simple-collection').addEventListener('click', () => {
+            const context = activeFulfilmentContext;
+            if (!context) return;
+            const technical = transactionStore.getInspectionReview(context.listingId)?.level === 'Technical';
+            if (technical && !documentRef.getElementById('simple-collection-decline').checked) {
+                documentRef.getElementById('fulfilment-choice-error').textContent = 'Confirm that you understand the inspection recommendation before continuing.';
+                documentRef.getElementById('simple-collection-decline').focus();
+                return;
+            }
+            const transaction = transactionStore.requestSimpleCollection(context.listingId, {
+                declinedInspection: documentRef.getElementById('simple-collection-decline').checked
+            });
+            if (!transaction) {
+                documentRef.getElementById('fulfilment-choice-error').textContent = 'Simple collection is not available for this item.';
+                return;
+            }
+            recordEvent(USABILITY_EVENT_TYPE.fulfilmentSelected, { relatedId: context.listingId, metadata: { fulfilment: 'simple_collection' } });
+            activeFulfilmentContext = null;
+            renderListings();
+            openHandover(context.listingId, fulfilmentChoiceDialog);
+        });
+        documentRef.getElementById('choose-shipping').addEventListener('click', () => {
+            const context = activeFulfilmentContext;
+            activeFulfilmentContext = null;
+            if (context) {
                 recordEvent(USABILITY_EVENT_TYPE.fulfilmentSelected, { relatedId: context.listingId, metadata: { fulfilment: 'shipping' } });
                 openShippingFlow(context.listingId, fulfilmentChoiceDialog);
             }
         });
-
         documentRef.getElementById('close-fulfilment-choice').addEventListener('click', () => dialogController.close(fulfilmentChoiceDialog));
         fulfilmentChoiceDialog.addEventListener('close', () => { activeFulfilmentContext = null; });
         documentRef.getElementById('request-shipping').addEventListener('click', () => {
@@ -689,6 +656,8 @@ export function createTransactionUI({ documentRef = document, config, state, bid
     bindEvents();
     return {
         openBuyNow,
+        simulateAuctionEnd,
+        resetDemoTransaction,
         resumeTransaction,
         openMeetupSummary,
         recordMeetupAttendance(meetupId, attendanceStatus) {
@@ -725,6 +694,7 @@ export function createTransactionUI({ documentRef = document, config, state, bid
             openHandover(meetup.id);
         },
         openShippingFlow,
-        setReportIssueHandler(handler) { reportIssueHandler = handler; }
+        setReportIssueHandler(handler) { reportIssueHandler = handler; },
+        setAccountGate(handler) { accountGate = handler; }
     };
 }

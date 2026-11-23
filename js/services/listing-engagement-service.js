@@ -1,8 +1,7 @@
 import { FAILURE_OUTCOME, LISTING_FORMAT, NOTIFICATION_TYPE, SPECIFICATION_FIELDS_BY_SUBCATEGORY, STORAGE_KEYS, TRANSACTION_STATUS } from '../core/constants.js';
 import { readArray, readRecord, writeJSON } from '../core/storage.js';
-import { isDemoUserId } from '../data/demo-users.js';
 import { getSampleListingQuestions } from '../data/sample-listing-questions.js';
-import { isStableId, normalizeTimestamp, uniqueRecords } from '../core/normalization.js';
+import { isPrototypeUserId, isStableId, normalizeTimestamp, uniqueRecords } from '../core/normalization.js';
 import { saveSellerSubmissions } from './submission-service.js';
 
 const dismissReasons = new Set(['duplicate', 'already_answered', 'contact_request', 'inappropriate', 'not_relevant']);
@@ -36,12 +35,12 @@ function supportsListingField(listing, field) {
 function normalizeQuestion(record) {
     if (!record || typeof record !== 'object' || Array.isArray(record)
         || !isStableId(record.id) || !isStableId(record.listingId)
-        || !isDemoUserId(record.questioningDemoUserId)) return null;
+        || !isPrototypeUserId(record.questioningDemoUserId)) return null;
     const question = cleanText(record.question, 300);
     const answer = record.answer == null ? null : cleanText(record.answer, 500);
     const createdAt = normalizeTimestamp(record.createdAt);
     const answeredAt = normalizeTimestamp(record.answeredAt);
-    const answeringSellerId = isDemoUserId(record.answeringSellerId) ? record.answeringSellerId : null;
+    const answeringSellerId = isPrototypeUserId(record.answeringSellerId) ? record.answeringSellerId : null;
     const publicStatus = record.publicStatus === 'dismissed' ? 'dismissed' : 'public';
     if (!question || hasSensitiveText(question) || (answer && hasSensitiveText(answer)) || !createdAt
         || (answer !== null && (!answer || !answeredAt || !answeringSellerId))) return null;
@@ -74,7 +73,7 @@ export function createListingEngagementService({
     const samples = getSampleListingQuestions(Array.from(listingStates.values()));
     const savedRecentlyViewed = readRecord(STORAGE_KEYS.recentlyViewed);
     const recentlyViewedByUser = new Map(Object.entries(savedRecentlyViewed)
-        .filter(([userId, ids]) => isDemoUserId(userId) && Array.isArray(ids))
+        .filter(([userId, ids]) => isPrototypeUserId(userId) && Array.isArray(ids))
         .map(([userId, ids]) => [userId, ids.filter(id => isStableId(id) && listingStates.has(id)).slice(0, 8)]));
 
     function persistQuestions(next) {
@@ -195,7 +194,7 @@ export function createListingEngagementService({
             const answer = cleanText(rawAnswer, 500);
             if (!question || !listing || question.publicStatus !== 'public' || question.answer
                 || listing.sellerUserId !== sellerUserId || question.questioningDemoUserId === sellerUserId
-                || !isDemoUserId(sellerUserId) || typeof rawAnswer !== 'string' || rawAnswer.length > 500
+                || !isPrototypeUserId(sellerUserId) || typeof rawAnswer !== 'string' || rawAnswer.length > 500
                 || !answer || hasSensitiveText(answer) || answer.length > 500) {
                 return { ok: false, code: 'invalid_answer' };
             }
@@ -254,7 +253,7 @@ export function createListingEngagementService({
         },
         trackViewed(listingId, userId = userService.getCurrentUser().id) {
             const listing = listingStates.get(listingId);
-            if (!isDemoUserId(userId) || !listingIsPublic(listing) || !activeListing(listing, transactionStore, Date.now())) return false;
+            if (!isPrototypeUserId(userId) || !listingIsPublic(listing) || !activeListing(listing, transactionStore, Date.now())) return false;
             const previous = Array.isArray(recentlyViewedByUser.get(userId))
                 ? recentlyViewedByUser.get(userId).filter(id => isStableId(id) && listingStates.has(id)) : [];
             recentlyViewedByUser.set(userId, [listingId, ...previous.filter(id => id !== listingId)].slice(0, 8));
@@ -265,7 +264,7 @@ export function createListingEngagementService({
                 .filter(listing => listing && listingIsPublic(listing) && activeListing(listing, transactionStore, Date.now()));
         },
         resetRecentlyViewed(userId) {
-            if (!isDemoUserId(userId)) return false;
+            if (!isPrototypeUserId(userId)) return false;
             const previous = recentlyViewedByUser.get(userId);
             recentlyViewedByUser.delete(userId);
             if (persistRecentlyViewed()) return true;
@@ -283,7 +282,7 @@ export function createListingEngagementService({
                 .filter(question => question.listing);
         },
         resetUser(userId) {
-            if (!isDemoUserId(userId)) return false;
+            if (!isPrototypeUserId(userId)) return false;
             const previousQuestions = [...questions];
             const next = previousQuestions.filter(question => question.questioningDemoUserId !== userId
                 && listingStates.get(question.listingId)?.sellerUserId !== userId);

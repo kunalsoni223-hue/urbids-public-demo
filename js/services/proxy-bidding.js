@@ -1,7 +1,6 @@
 import { STORAGE_KEYS } from '../core/constants.js';
-import { normalizeTimestamp } from '../core/normalization.js';
+import { isPrototypeUserId, normalizeTimestamp } from '../core/normalization.js';
 import { readRecord, removeStoredValue, writeJSON } from '../core/storage.js';
-import { isDemoUserId } from '../data/demo-users.js';
 
 // Private maximum bids are kept apart from public bid history and are only ever returned to their owner.
 export function loadAutoBids() {
@@ -11,7 +10,7 @@ export function loadAutoBids() {
         const seenUsers = new Set();
         const valid = entries.filter(entry => entry
             && typeof entry === 'object'
-            && isDemoUserId(entry.userId)
+            && isPrototypeUserId(entry.userId)
             && !seenUsers.has(entry.userId)
             && seenUsers.add(entry.userId)
             && Number.isSafeInteger(entry.maxAmount)

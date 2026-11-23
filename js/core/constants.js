@@ -4,19 +4,26 @@ export const STORAGE_KEYS = Object.freeze({
     autoBids: 'urbids-demo-auto-bids',
     watchlist: 'urbids-demo-watchlist',
     userWatchlists: 'urbids-demo-user-watchlists',
+    currentDemoUser: 'urbids-demo-current-user',
+    localUsers: 'urbids-local-users',
+    legacyCurrentLocalUser: 'urbids-local-current-user',
     disputes: 'urbids-demo-disputes',
     ratings: 'urbids-demo-ratings',
     sellerSubmissions: 'urbids-demo-seller-submissions',
+    sellerDrafts: 'urbids-demo-seller-drafts',
     meetups: 'urbids-demo-meetups',
     auctionTransactions: 'urbids-demo-auction-transactions',
     notifications: 'urbids-demo-notifications',
     feedback: 'urbids-demo-feedback',
+    usabilityEvents: 'urbids-demo-usability-events',
     userProfiles: 'urbids-demo-user-profiles',
     listingQuestions: 'urbids-demo-listing-questions',
     recentlyViewed: 'urbids-demo-recently-viewed'
 });
 
 export const PROTOTYPE_STORAGE_SCHEMA_VERSION = 1;
+
+export const PROTOTYPE_MODE = Object.freeze({ development: 'development', usabilityTest: 'usability_test' });
 
 export const LISTING_FORMAT = Object.freeze({
     auction: 'auction',
@@ -123,6 +130,23 @@ export const USABILITY_EVENT_TYPE = Object.freeze({
     transactionCompleted: 'transaction_completed',
     sellerSubmissionStarted: 'seller_submission_started',
     sellerSubmissionCompleted: 'seller_submission_completed',
+    sellerFormStarted: 'seller_form_started',
+    sellerSectionCompleted: 'seller_section_completed',
+    sellerDraftSaved: 'seller_draft_saved',
+    sellerDraftResumed: 'seller_draft_resumed',
+    sellerDraftDeleted: 'seller_draft_deleted',
+    sellerPreviewOpened: 'seller_preview_opened',
+    sellingFormatSelected: 'selling_format_selected',
+    auctionDurationSelected: 'auction_duration_selected',
+    autoRelistSelected: 'auto_relist_selected',
+    sellerFulfilmentSelected: 'seller_fulfilment_selected',
+    discoveryShelfViewed: 'discovery_shelf_viewed',
+    discoveryListingOpened: 'discovery_listing_opened',
+    loadMoreUsed: 'load_more_used',
+    localityFilterSelected: 'locality_filter_selected',
+    exploreMoreSelected: 'explore_more_selected',
+    categorySelected: 'category_selected',
+    discoveryModeSelected: 'discovery_mode_selected',
     questionStarted: 'question_started',
     questionSubmitted: 'question_submitted',
     sellerAnswerSubmitted: 'seller_answer_submitted',
@@ -132,7 +156,13 @@ export const USABILITY_EVENT_TYPE = Object.freeze({
     similarListingOpened: 'similar_listing_opened',
     sellerListingOpened: 'seller_listing_opened',
     recentlyViewedOpened: 'recently_viewed_opened',
-    feedbackSubmitted: 'feedback_submitted'
+    feedbackSubmitted: 'feedback_submitted',
+    accountCreationStarted: 'account_creation_started',
+    accountCreationAbandoned: 'account_creation_abandoned',
+    accountCreated: 'account_created',
+    prototypeAccountLeft: 'prototype_account_left',
+    prototypeAccountRestored: 'prototype_account_restored',
+    prototypeAccountDeleted: 'prototype_account_deleted'
 });
 
 export const USABILITY_JOURNEY = Object.freeze({
@@ -175,6 +205,18 @@ export const DEMO_USER_IDS = Object.freeze({
 
 export const DEFAULT_DEMO_USER_ID = DEMO_USER_IDS.kunal;
 
+export const USER_TYPE = Object.freeze({
+    demo: 'demo',
+    local: 'local',
+    guest: 'guest'
+});
+
+export const LOCAL_ACCOUNT_INTEREST = Object.freeze({
+    buying: 'buying',
+    selling: 'selling',
+    both: 'both'
+});
+
 export const FULFILMENT_METHOD = Object.freeze({
     inPerson: 'in_person',
     shipping: 'shipping',
@@ -191,6 +233,8 @@ export const DEFAULT_FULFILMENT_METHOD = FULFILMENT_METHOD.inPerson;
 
 export const SPECIFICATION_FIELD_LABELS = Object.freeze({
     processor: 'Processor',
+    productType: 'Product type',
+    displaySize: 'Display size',
     ram: 'RAM',
     storage: 'Storage / capacity',
     color: 'Color',
@@ -214,7 +258,7 @@ export const SPECIFICATION_FIELD_LABELS = Object.freeze({
     signsOfWear: 'Signs of wear',
     authenticityNotes: 'Authenticity notes',
     dimensions: 'Dimensions',
-    age: 'Age',
+    age: 'Approximate age',
     assemblyRequired: 'Assembly required',
     collectionRequirements: 'Collection requirements',
     accessNotes: 'Access (lift / stairs)',
@@ -243,7 +287,7 @@ const applianceFields = Object.freeze([
     'serviceHistory', 'knownDefects', 'originalInvoice'
 ]);
 const bookFields = Object.freeze([
-    'author', 'edition', 'completeness', 'language', 'format', 'publicationYear', 'isbn', 'coverCondition', 'annotations'
+    'author', 'edition', 'completeness', 'language', 'format', 'publicationYear', 'isbn', 'coverCondition', 'annotations', 'knownDefects'
 ]);
 
 const electronicsPhoneFields = Object.freeze([
@@ -252,13 +296,21 @@ const electronicsPhoneFields = Object.freeze([
     'ownershipConcern', 'counterfeitConcern'
 ]);
 const electronicsLaptopFields = Object.freeze([
-    'processor', 'ram', 'storage', 'color', 'purchaseYear', 'warrantyStatus', 'batteryHealth',
+    'processor', 'ram', 'storage', 'displaySize', 'color', 'purchaseYear', 'warrantyStatus', 'batteryHealth',
     'includedAccessories', 'originalBox', 'functionalStatus', 'knownDefects', 'serialModelInfo', 'activationLock', 'proofOfPurchase',
     'ownershipConcern', 'counterfeitConcern'
 ]);
+const electronicsCameraFields = Object.freeze([
+    'productType', 'storage', 'color', 'purchaseYear', 'warrantyStatus', 'includedAccessories',
+    'functionalStatus', 'knownDefects', 'serialModelInfo', 'proofOfPurchase'
+]);
+const electronicsGamingFields = Object.freeze([
+    'productType', 'storage', 'color', 'purchaseYear', 'warrantyStatus', 'includedAccessories',
+    'functionalStatus', 'knownDefects', 'serialModelInfo', 'proofOfPurchase'
+]);
 const fashionFields = Object.freeze([
     'brand', 'size', 'color', 'material', 'purchaseYear', 'proofOfPurchase', 'originalPackaging',
-    'signsOfWear', 'authenticityNotes'
+    'signsOfWear', 'authenticityNotes', 'knownDefects'
 ]);
 
 export const SUBMISSION_STATUS = Object.freeze({
@@ -280,8 +332,12 @@ export const SECOND_CHANCE_OFFER_STATUS = Object.freeze({
     expired: 'expired'
 });
 
-export const DEFAULT_AUCTION_DURATION_HOURS = 72;
-export const AUCTION_DURATION_OPTIONS_HOURS = Object.freeze([24, 48, 72, 168]);
+export const DEFAULT_AUCTION_DURATION_HOURS = 168;
+export const AUCTION_DURATION_OPTIONS_HOURS = Object.freeze([72, 120, 168, 240, 336]);
+export const LEGACY_AUCTION_DURATION_OPTIONS_HOURS = Object.freeze([24, 48]);
+export const ALL_SUPPORTED_AUCTION_DURATION_OPTIONS_HOURS = Object.freeze([
+    ...LEGACY_AUCTION_DURATION_OPTIONS_HOURS, ...AUCTION_DURATION_OPTIONS_HOURS
+]);
 
 export const RESERVE_PRICE_MODE = Object.freeze({
 	none: 'none',
@@ -389,7 +445,7 @@ export const CATEGORY_LABELS = Object.freeze({
     [CATEGORY.fashion]: 'Fashion',
     [CATEGORY.furniture]: 'Furniture',
     [CATEGORY.homeAppliances]: 'Home appliances',
-    [CATEGORY.books]: 'Books and collectibles'
+    [CATEGORY.books]: 'Books & Collectibles'
 });
 
 // Compact navigation groups; research/demo categories are shown only outside pilot mode.
@@ -398,13 +454,15 @@ export const CATEGORY_NAV_LABELS = Object.freeze({
     [CATEGORY.furniture]: 'Furniture',
     [CATEGORY.homeAppliances]: 'Home',
     [CATEGORY.fashion]: 'Fashion',
-    [CATEGORY.books]: 'Books'
+    [CATEGORY.books]: 'Books & Collectibles'
 });
 
 export const SUBCATEGORY = Object.freeze({
     smartphones: 'smartphones',
     laptops: 'laptops',
     audio: 'audio',
+    cameras: 'cameras',
+    gaming: 'gaming',
     wearables: 'wearables',
     sneakers: 'sneakers',
     bags: 'bags',
@@ -445,6 +503,8 @@ export const SUBCATEGORY_LABELS = Object.freeze({
     [SUBCATEGORY.smartphones]: 'Smartphones',
     [SUBCATEGORY.laptops]: 'Laptops',
     [SUBCATEGORY.audio]: 'Premium audio',
+    [SUBCATEGORY.cameras]: 'Cameras',
+    [SUBCATEGORY.gaming]: 'Gaming',
     [SUBCATEGORY.wearables]: 'Smartwatches',
     [SUBCATEGORY.sneakers]: 'Sneakers',
     [SUBCATEGORY.bags]: 'Bags',
@@ -459,10 +519,12 @@ export const SPECIFICATION_FIELDS_BY_SUBCATEGORY = Object.freeze({
     [SUBCATEGORY.smartphones]: electronicsPhoneFields,
     [SUBCATEGORY.laptops]: electronicsLaptopFields,
     [SUBCATEGORY.audio]: Object.freeze([
-        'connectivity', 'color', 'purchaseYear', 'warrantyStatus', 'batteryHealth', 'includedAccessories',
+        'productType', 'connectivity', 'color', 'purchaseYear', 'warrantyStatus', 'batteryHealth', 'includedAccessories',
         'originalBox', 'functionalStatus', 'proofOfPurchase', 'knownDefects', 'serialModelInfo',
         'ownershipConcern', 'counterfeitConcern'
     ]),
+    [SUBCATEGORY.cameras]: electronicsCameraFields,
+    [SUBCATEGORY.gaming]: electronicsGamingFields,
     [SUBCATEGORY.wearables]: Object.freeze([
         'storage', 'color', 'purchaseYear', 'warrantyStatus', 'batteryHealth', 'includedAccessories',
         'originalBox', 'functionalStatus', 'proofOfPurchase', 'knownDefects', 'serialModelInfo', 'activationLock',
@@ -500,6 +562,8 @@ export const SUBCATEGORIES_BY_CATEGORY = Object.freeze({
         SUBCATEGORY.smartphones,
         SUBCATEGORY.laptops,
         SUBCATEGORY.audio,
+        SUBCATEGORY.cameras,
+        SUBCATEGORY.gaming,
         SUBCATEGORY.wearables,
         SUBCATEGORY.otherElectronics
     ]),
