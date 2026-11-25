@@ -1,7 +1,7 @@
 import { config } from './js/config.js';
 import { initializePrototypeStorageSchema, setStorageProblemHandler, subscribeToStorageChanges } from './js/core/storage.js';
 import { NOTIFICATION_TYPE, PROTOTYPE_MODE, USABILITY_EVENT_TYPE } from './js/core/constants.js';
-import { loadListingStates } from './js/services/listing-service.js';
+import { initializeSampleTiming, loadListingStates } from './js/services/listing-service.js';
 import { createBiddingService, getHighestValidBid, restoreBids } from './js/services/bidding-service.js';
 import { createTransactionStore } from './js/services/transaction-service.js';
 import { loadSellerSubmissions } from './js/services/submission-service.js';
@@ -54,6 +54,7 @@ const dialogController = createDialogController(documentRef);
 const sellerPhotoManager = createSellerPhotoManager({ documentRef });
 const submissions = loadSellerSubmissions();
 const { listingStates } = loadListingStates(submissions, sellerPhotoManager.resolveImages);
+initializeSampleTiming(listingStates);
 const localAccountService = createLocalAccountService();
 const userService = createUserService(listingStates, localAccountService);
 let notificationUI;
@@ -312,4 +313,5 @@ createPublicInfoUI({ documentRef, dialogController, openFeedback: feedbackUI.ope
 marketplaceUI.renderListings();
 sellerUI.renderSubmissions();
 accountUI.openFromLocation();
+sellerUI.handleSellerLocation();
 listingDialogUI.handleListingLocation();

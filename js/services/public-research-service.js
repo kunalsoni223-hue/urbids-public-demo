@@ -1,5 +1,5 @@
 import { CATEGORY, STORAGE_KEYS, SUBCATEGORIES_BY_CATEGORY, USABILITY_EVENT_TYPE, USABILITY_JOURNEY } from '../core/constants.js';
-import { readArray, writeJSON } from '../core/storage.js';
+import { readArray, removeStoredValue, writeJSON } from '../core/storage.js';
 import { isStableId, uniqueRecords } from '../core/normalization.js';
 
 const eventTypes = new Set(Object.values(USABILITY_EVENT_TYPE));
@@ -78,10 +78,29 @@ export function createPublicResearchService({ userService = null, onEvent = () =
         return true;
     }
 
+    function getEvents() {
+        return events.map(event => ({ ...event, metadata: { ...event.metadata } }));
+    }
+
     return {
         recordEvent,
-        getEvents() {
-            return events.map(event => ({ ...event, metadata: { ...event.metadata } }));
+        getEvents,
+        getResearchReport() {
+            return {
+                feedback: feedback.map(response => ({
+                    ...response,
+                    scores: { ...response.scores },
+                    policyAnswers: { ...response.policyAnswers }
+                })),
+                events: getEvents()
+            };
+        },
+        resetResearchData() {
+            if (!removeStoredValue(STORAGE_KEYS.feedback)) return false;
+            feedback.length = 0;
+            if (!removeStoredValue(STORAGE_KEYS.usabilityEvents)) return false;
+            events.length = 0;
+            return true;
         },
         submitFeedback(input) {
             if (!input || !Object.values(USABILITY_JOURNEY).includes(input.journey)

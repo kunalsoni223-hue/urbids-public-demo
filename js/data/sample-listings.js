@@ -1,7 +1,11 @@
 import { CATEGORY, CONDITION_GRADE, DEMO_USER_IDS, FULFILMENT_METHOD, SUBCATEGORY } from '../core/constants.js';
 
 const mockListingCreatedAt = Date.now();
+export const sampleListingSeedTime = mockListingCreatedAt;
 const hoursAgo = hours => new Date(mockListingCreatedAt - hours * 60 * 60 * 1000).toISOString();
+const hoursFromNow = hours => new Date(mockListingCreatedAt + hours * 60 * 60 * 1000).toISOString();
+const daysFromNow = days => new Date(mockListingCreatedAt + days * 24 * 60 * 60 * 1000).toISOString();
+
 const unsplash = id => `https://images.unsplash.com/photo-${id}?auto=format&fit=crop&w=900&q=80`;
 const sampleImages = {
     galaxy: [unsplash('1598965402089-897ce52e8355')],
@@ -91,7 +95,7 @@ export const listings = [
         bidCount: 14,
         buyNowPrice: 89000,
         listedAt: new Date(mockListingCreatedAt - 8 * 60 * 60 * 1000).toISOString(),
-        auctionEndsAt: '2026-10-17T21:15:00+05:30',
+        auctionEndsAt: hoursFromNow(2),
         auctionEndLabel: 'Ends Oct 17, 9:15 PM'
     },
     {
@@ -121,7 +125,7 @@ export const listings = [
         bidCount: 9,
         buyNowPrice: null,
         listedAt: new Date(mockListingCreatedAt - 6 * 60 * 60 * 1000).toISOString(),
-        auctionEndsAt: '2026-10-18T23:00:00+05:30',
+        auctionEndsAt: hoursFromNow(5),
         auctionEndLabel: 'Ends Oct 18, 11 PM'
     },
     {
@@ -151,7 +155,7 @@ export const listings = [
         bidCount: 5,
         buyNowPrice: 44000,
         listedAt: new Date(mockListingCreatedAt - 4 * 60 * 60 * 1000).toISOString(),
-        auctionEndsAt: '2026-10-19T14:00:00+05:30',
+        auctionEndsAt: hoursFromNow(8),
         auctionEndLabel: 'Ends Oct 19, 2 PM'
     },
     {
@@ -182,7 +186,7 @@ export const listings = [
         bidCount: 5,
         buyNowPrice: 65000,
         listedAt: new Date(mockListingCreatedAt - 3 * 60 * 60 * 1000).toISOString(),
-        auctionEndsAt: '2026-10-18T18:00:00+05:30',
+        auctionEndsAt: hoursFromNow(11),
         auctionEndLabel: 'Ends Oct 18, 6 PM'
     },
     {
@@ -212,7 +216,7 @@ export const listings = [
         bidCount: 3,
         buyNowPrice: null,
         listedAt: new Date(mockListingCreatedAt - 2 * 60 * 60 * 1000).toISOString(),
-        auctionEndsAt: '2026-10-20T20:00:00+05:30',
+        auctionEndsAt: hoursFromNow(24),
         auctionEndLabel: 'Ends Oct 20, 8 PM'
     },
     {
@@ -242,7 +246,7 @@ export const listings = [
         bidCount: 11,
         buyNowPrice: 23000,
         listedAt: new Date(mockListingCreatedAt - 2 * 60 * 60 * 1000).toISOString(),
-        auctionEndsAt: '2026-10-18T01:00:00+05:30',
+        auctionEndsAt: hoursFromNow(27.6),
         auctionEndLabel: 'Ends Oct 18, 1 AM'
     },
     {
@@ -272,7 +276,7 @@ export const listings = [
         bidCount: 2,
         buyNowPrice: 21000,
         listedAt: new Date(mockListingCreatedAt - 60 * 60 * 1000).toISOString(),
-        auctionEndsAt: '2026-10-17T22:00:00+05:30',
+        auctionEndsAt: hoursFromNow(31.2),
         auctionEndLabel: 'Ends Oct 17, 10 PM'
     },
     {
@@ -302,7 +306,7 @@ export const listings = [
         bidCount: 6,
         buyNowPrice: 5200,
         listedAt: new Date(mockListingCreatedAt - 8 * 60 * 60 * 1000).toISOString(),
-        auctionEndsAt: '2026-10-18T00:30:00+05:30',
+        auctionEndsAt: hoursFromNow(34.8),
         auctionEndLabel: 'Ends Oct 18, 12:30 AM'
     },
     {
@@ -332,7 +336,7 @@ export const listings = [
         bidCount: 4,
         buyNowPrice: null,
         listedAt: new Date(mockListingCreatedAt - 6 * 60 * 60 * 1000).toISOString(),
-        auctionEndsAt: '2026-10-18T20:00:00+05:30',
+        auctionEndsAt: hoursFromNow(38.4),
         auctionEndLabel: 'Ends Oct 18, 8 PM'
     },
     {
@@ -362,7 +366,7 @@ export const listings = [
         bidCount: 12,
         buyNowPrice: 24000,
         listedAt: new Date(mockListingCreatedAt - 5 * 60 * 60 * 1000).toISOString(),
-        auctionEndsAt: '2026-10-19T23:15:00+05:30',
+        auctionEndsAt: hoursFromNow(42),
         auctionEndLabel: 'Ends Oct 19, 11:15 PM'
     },
     {
@@ -392,7 +396,7 @@ export const listings = [
         bidCount: 3,
         buyNowPrice: 23000,
         listedAt: new Date(mockListingCreatedAt - 4 * 60 * 60 * 1000).toISOString(),
-        auctionEndsAt: '2026-10-19T20:00:00+05:30',
+        auctionEndsAt: hoursFromNow(72),
         auctionEndLabel: 'Ends Oct 19, 8 PM'
     },
     {
@@ -422,7 +426,7 @@ export const listings = [
         bidCount: 1,
         buyNowPrice: null,
         listedAt: new Date(mockListingCreatedAt - 3 * 60 * 60 * 1000).toISOString(),
-        auctionEndsAt: '2026-10-20T18:00:00+05:30',
+        auctionEndsAt: hoursFromNow(79.2),
         auctionEndLabel: 'Ends Oct 20, 6 PM'
     },
     {
@@ -452,7 +456,7 @@ export const listings = [
         bidCount: 7,
         buyNowPrice: null,
         listedAt: hoursAgo(20),
-        auctionEndsAt: '2026-10-21T20:30:00+05:30',
+        auctionEndsAt: hoursFromNow(86.4),
         auctionEndLabel: 'Ends Oct 21, 8:30 PM'
     },
     {
@@ -482,7 +486,7 @@ export const listings = [
         bidCount: 11,
         buyNowPrice: 33000,
         listedAt: hoursAgo(30),
-        auctionEndsAt: '2026-10-22T11:00:00+05:30',
+        auctionEndsAt: hoursFromNow(93.6),
         auctionEndLabel: 'Ends Oct 22, 11 AM'
     },
     {
@@ -512,7 +516,7 @@ export const listings = [
         bidCount: 4,
         buyNowPrice: 36000,
         listedAt: hoursAgo(5),
-        auctionEndsAt: '2026-10-24T19:00:00+05:30',
+        auctionEndsAt: hoursFromNow(100.8),
         auctionEndLabel: 'Ends Oct 24, 7 PM'
     },
     {
@@ -543,7 +547,7 @@ export const listings = [
         bidCount: 8,
         buyNowPrice: null,
         listedAt: hoursAgo(26),
-        auctionEndsAt: '2026-10-23T21:00:00+05:30',
+        auctionEndsAt: hoursFromNow(108),
         auctionEndLabel: 'Ends Oct 23, 9 PM'
     },
     {
@@ -574,7 +578,7 @@ export const listings = [
         bidCount: 19,
         buyNowPrice: 104000,
         listedAt: hoursAgo(44),
-        auctionEndsAt: '2026-10-22T22:30:00+05:30',
+        auctionEndsAt: hoursFromNow(120),
         auctionEndLabel: 'Ends Oct 22, 10:30 PM'
     },
     {
@@ -604,7 +608,7 @@ export const listings = [
         bidCount: 6,
         buyNowPrice: 27500,
         listedAt: hoursAgo(12),
-        auctionEndsAt: '2026-10-25T08:00:00+05:30',
+        auctionEndsAt: hoursFromNow(127.2),
         auctionEndLabel: 'Ends Oct 25, 8 AM'
     },
     {
@@ -634,7 +638,7 @@ export const listings = [
         bidCount: 3,
         buyNowPrice: null,
         listedAt: hoursAgo(9),
-        auctionEndsAt: '2026-10-23T09:30:00+05:30',
+        auctionEndsAt: hoursFromNow(134.4),
         auctionEndLabel: 'Ends Oct 23, 9:30 AM'
     },
     {
@@ -664,7 +668,7 @@ export const listings = [
         bidCount: 9,
         buyNowPrice: 15500,
         listedAt: hoursAgo(14),
-        auctionEndsAt: '2026-10-21T17:00:00+05:30',
+        auctionEndsAt: hoursFromNow(141.6),
         auctionEndLabel: 'Ends Oct 21, 5 PM'
     },
     {
@@ -694,7 +698,7 @@ export const listings = [
         bidCount: 5,
         buyNowPrice: 10500,
         listedAt: hoursAgo(7),
-        auctionEndsAt: '2026-10-26T16:00:00+05:30',
+        auctionEndsAt: hoursFromNow(148.8),
         auctionEndLabel: 'Ends Oct 26, 4 PM'
     },
     {
@@ -726,7 +730,7 @@ export const listings = [
         bidCount: 6,
         buyNowPrice: 19000,
         listedAt: hoursAgo(18),
-        auctionEndsAt: '2026-10-27T18:00:00+05:30',
+        auctionEndsAt: hoursFromNow(156),
         auctionEndLabel: 'Ends Oct 27, 6 PM'
     },
     {
@@ -758,7 +762,7 @@ export const listings = [
         bidCount: 4,
         buyNowPrice: null,
         listedAt: hoursAgo(10),
-        auctionEndsAt: '2026-10-25T12:30:00+05:30',
+        auctionEndsAt: hoursFromNow(168),
         auctionEndLabel: 'Ends Oct 25, 12:30 PM'
     },
     {
@@ -791,7 +795,7 @@ export const listings = [
         bidCount: 8,
         buyNowPrice: null,
         listedAt: hoursAgo(34),
-        auctionEndsAt: '2026-10-28T20:00:00+05:30',
+        auctionEndsAt: hoursFromNow(176),
         auctionEndLabel: 'Ends Oct 28, 8 PM'
     },
     {
@@ -823,7 +827,7 @@ export const listings = [
         bidCount: 2,
         buyNowPrice: 6000,
         listedAt: hoursAgo(6),
-        auctionEndsAt: '2026-10-29T13:00:00+05:30',
+        auctionEndsAt: hoursFromNow(184),
         auctionEndLabel: 'Ends Oct 29, 1 PM'
     },
     {
@@ -854,7 +858,7 @@ export const listings = [
         bidCount: 10,
         buyNowPrice: 26500,
         listedAt: hoursAgo(28),
-        auctionEndsAt: '2026-10-24T15:00:00+05:30',
+        auctionEndsAt: hoursFromNow(192),
         auctionEndLabel: 'Ends Oct 24, 3 PM'
     },
     {
@@ -885,7 +889,7 @@ export const listings = [
         bidCount: 13,
         buyNowPrice: null,
         listedAt: hoursAgo(40),
-        auctionEndsAt: '2026-10-22T19:30:00+05:30',
+        auctionEndsAt: hoursFromNow(200),
         auctionEndLabel: 'Ends Oct 22, 7:30 PM'
     },
     {
@@ -915,7 +919,7 @@ export const listings = [
         bidCount: 5,
         buyNowPrice: 24000,
         listedAt: hoursAgo(15),
-        auctionEndsAt: '2026-10-26T10:00:00+05:30',
+        auctionEndsAt: hoursFromNow(208),
         auctionEndLabel: 'Ends Oct 26, 10 AM'
     },
     {
@@ -946,7 +950,7 @@ export const listings = [
         bidCount: 3,
         buyNowPrice: null,
         listedAt: hoursAgo(22),
-        auctionEndsAt: '2026-10-30T18:30:00+05:30',
+        auctionEndsAt: hoursAgo(24),
         auctionEndLabel: 'Ends Oct 30, 6:30 PM'
     },
     {
@@ -976,7 +980,7 @@ export const listings = [
         bidCount: 7,
         buyNowPrice: 2600,
         listedAt: hoursAgo(16),
-        auctionEndsAt: '2026-10-23T14:00:00+05:30',
+        auctionEndsAt: hoursAgo(36),
         auctionEndLabel: 'Ends Oct 23, 2 PM'
     },
     {
@@ -1006,7 +1010,7 @@ export const listings = [
         bidCount: 5,
         buyNowPrice: null,
         listedAt: hoursAgo(50),
-        auctionEndsAt: '2026-10-31T17:00:00+05:30',
+        auctionEndsAt: hoursAgo(48),
         auctionEndLabel: 'Ends Oct 31, 5 PM'
     },
     {
@@ -1036,7 +1040,7 @@ export const listings = [
         bidCount: 4,
         buyNowPrice: 7200,
         listedAt: hoursAgo(11),
-        auctionEndsAt: '2026-10-24T22:00:00+05:30',
+        auctionEndsAt: hoursAgo(60),
         auctionEndLabel: 'Ends Oct 24, 10 PM'
     }
 ];

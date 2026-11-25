@@ -21,7 +21,7 @@
     <link rel="stylesheet" href="css/account.css">
     <link rel="stylesheet" href="css/responsive.css">
 </head>
-<body>
+<body data-prototype-mode="usability_test">
     <header class="site-header">
         <div class="container navigation">
             <a class="brand" id="brand-name" href="#listings">Urbids</a>
@@ -50,6 +50,7 @@
                         <button id="open-profile-reviews" type="button" data-account-section="profile">Profile and reviews</button>
                         <button id="open-account-details" type="button" data-account-section="details">Account details</button>
                         <button id="profile-share-feedback" type="button">Share feedback</button>
+                        <button id="switch-demo-user" type="button">Switch demo user</button>
                     </div>
                 </details>
             </nav>
@@ -61,10 +62,11 @@
                     <p class="mobile-profile-note">Browsing as <strong id="mobile-profile-name">Visitor</strong> · Prototype only</p>
                     <button id="mobile-create-account" type="button" hidden>Create account</button>
                     <button id="mobile-continue-browsing" type="button" hidden>Continue browsing</button>
-                    <button id="mobile-open-my-activity" type="button" data-account-section="activity">My Activity</button>
-                    <button type="button" data-account-section="profile">Profile and reviews</button>
-                    <button type="button" data-account-section="details">Account details</button>
+                    <button id="mobile-open-my-activity" type="button" data-account-section="activity" aria-label="Open My Activity">My Activity</button>
+                    <button type="button" data-account-section="profile" aria-label="Open Profile and reviews">Profile and reviews</button>
+                    <button type="button" data-account-section="details" aria-label="Open Account details">Account details</button>
                     <button id="mobile-share-feedback" type="button">Share feedback</button>
+                    <button id="mobile-switch-demo-user" type="button">Switch demo user</button>
                 </nav>
             </details>
         </div>
@@ -415,6 +417,17 @@
             </div>
         </dialog>
 
+        <dialog class="bid-dialog" id="switch-demo-user-dialog" aria-labelledby="switch-demo-user-title">
+            <div class="bid-dialog-content">
+                <h2 id="switch-demo-user-title">Switch demo user</h2>
+                <p class="bid-minimum">Prototype only. No login or authentication.</p>
+                <div class="demo-user-options" id="demo-user-options"></div>
+                <div class="bid-actions">
+                    <button class="bid-cancel" id="cancel-switch-demo-user" type="button">Close</button>
+                </div>
+            </div>
+        </dialog>
+
         <dialog class="bid-dialog notification-dialog" id="notification-dialog" aria-labelledby="notification-title">
             <div class="bid-dialog-content">
                 <div class="product-dialog-header">
@@ -526,6 +539,7 @@
                         <label for="auction-edit-start">Starting bid (INR)</label><input id="auction-edit-start" type="number" min="1" step="1" required>
                         <label for="auction-edit-increment">Bid increment</label><select id="auction-edit-increment" required></select>
                         <label for="auction-edit-buy">Buy Now (INR, optional)</label><input id="auction-edit-buy" type="number" min="1" step="1">
+                        <div id="auction-edit-reserve-controls"><label for="auction-edit-reserve">Reserve (development research only)</label><input id="auction-edit-reserve" type="number" min="1" step="1"></div>
                         <label for="auction-edit-duration">Duration</label><select id="auction-edit-duration"><option value="24">24 hours</option><option value="48">48 hours</option><option value="72">72 hours</option><option value="168">168 hours</option></select>
                     </fieldset>
                     <fieldset id="auction-offer-fields">
@@ -646,156 +660,10 @@
             </div>
         </dialog>
 
-        <dialog class="bid-dialog" id="seller-listing-dialog" aria-labelledby="seller-listing-title">
+        <dialog class="bid-dialog" id="seller-listing-dialog" aria-labelledby="seller-listing-title" hidden>
             <div class="bid-dialog-content">
-                <h2 id="seller-listing-title">Create a listing</h2>
-                <p class="bid-minimum">Describe your item, choose how to sell, then review and publish. Drafts and submissions stay in this browser; other browsers cannot see them, and no real moderator is contacted. Do not enter personal addresses, payment details or sensitive information.</p>
-                <form class="seller-listing-form" id="seller-listing-form" novalidate>
-                    <details class="seller-form-section" data-seller-section="product" open>
-                        <summary>1. Product</summary>
-                        <fieldset><legend>What are you selling?</legend>
-                            <label for="seller-category">Category</label>
-                            <select id="seller-category" name="category" aria-describedby="seller-listing-error" required></select>
-                            <label for="seller-subcategory">Subcategory</label>
-                            <select id="seller-subcategory" name="subcategory" aria-describedby="seller-listing-error" required></select>
-                            <label for="seller-brand-model">Brand or maker</label>
-                            <input id="seller-brand-model" name="brandModel" type="text" maxlength="100" aria-describedby="seller-listing-error">
-                            <label for="seller-model">Model (if relevant)</label>
-                            <input id="seller-model" name="model" type="text" maxlength="100">
-                            <label for="seller-item-title">Listing title</label>
-                            <input id="seller-item-title" name="title" type="text" maxlength="60" aria-describedby="seller-title-count seller-listing-error" required>
-                            <p class="seller-character-count" id="seller-title-count" aria-live="polite">0 / 60</p>
-                            <div id="seller-estimated-value-wrap"><label for="seller-estimated-value">Estimated item value (INR)</label>
-                                <input id="seller-estimated-value" name="estimatedValue" type="number" min="1" step="1"></div>
-                        </fieldset>
-                    </details>
-                    <details class="seller-form-section" data-seller-section="photos">
-                        <summary>2. Photos</summary>
-                        <fieldset><legend>Guided photo plan</legend>
-                            <label for="seller-photo-purpose">Photo purpose</label>
-                            <select id="seller-photo-purpose" name="photoPurpose"></select>
-                            <label for="seller-photos">Choose photos</label>
-                            <input id="seller-photos" name="photos" type="file" accept="image/*" multiple aria-describedby="seller-photo-note seller-listing-error">
-                            <p class="bid-minimum" id="seller-photo-note">Add at least 3 where possible (up to 10). These are temporary previews in this browser session; files may need selecting again after a refresh.</p>
-                            <div id="seller-photo-guidance" class="seller-photo-guidance"></div>
-                            <div class="seller-photo-previews" id="seller-photo-previews"></div>
-                        </fieldset>
-                    </details>
-                    <details class="seller-form-section" data-seller-section="condition">
-                        <summary>3. Condition</summary>
-                        <fieldset><legend>How would you describe its condition?</legend>
-                            <label for="seller-condition">Condition</label>
-                            <select id="seller-condition" name="condition" aria-describedby="seller-condition-guidance seller-listing-error" required></select>
-                            <p class="seller-condition-guidance" id="seller-condition-guidance">Condition is seller-declared, not Urbids-verified.</p>
-                            <label for="seller-known-defects">Known defects</label>
-                            <textarea id="seller-known-defects" name="knownDefects" rows="3" maxlength="500" aria-describedby="seller-defects-help seller-defects-count"></textarea>
-                            <p class="bid-minimum" id="seller-defects-help">Mention scratches, damage, missing parts, repairs or functional problems.</p>
-                            <p class="seller-character-count" id="seller-defects-count" aria-live="polite">0 / 500</p>
-                            <label class="seller-confirmation"><input id="seller-defects-confirmed" name="defectsConfirmed" type="checkbox"> I have disclosed all known defects.</label>
-                        </fieldset>
-                    </details>
-                    <details class="seller-form-section" data-seller-section="details">
-                        <summary>4. Product details</summary>
-                        <fieldset class="seller-specifications"><legend>Category-specific details</legend>
-                            <p class="bid-minimum">Only details relevant to this item are shown. Never enter full serial numbers or credentials.</p>
-                            <div id="seller-specification-fields" class="seller-specification-fields"></div>
-                            <details class="seller-help" id="seller-proof-help" hidden><summary>Proof of purchase</summary><p>Select whether proof is available; do not enter receipt numbers or upload private documents.</p></details>
-                            <details class="seller-help" id="seller-activation-help" hidden><summary>Activation lock</summary><p>Only list a device you can lawfully transfer with account locks removed. Never share credentials.</p></details>
-                            <label for="seller-included-items">Included items / accessories</label>
-                            <textarea id="seller-included-items" name="includedItems" rows="2" maxlength="500"></textarea>
-                            <label for="seller-description">Description</label>
-                            <textarea id="seller-description" name="description" rows="4" maxlength="2000" aria-describedby="seller-description-count seller-listing-error" required></textarea>
-                            <p class="seller-character-count" id="seller-description-count" aria-live="polite">0 / 2000</p>
-                            <label for="seller-reference">Optional seller reference number</label>
-                            <input id="seller-reference" name="sellerReference" type="text" maxlength="40">
-                        </fieldset>
-                    </details>
-                    <details class="seller-form-section" data-seller-section="format">
-                        <summary>5. Selling format and price</summary>
-                        <fieldset><legend>Choose how to sell</legend>
-                            <label for="seller-listing-format">Selling format</label>
-                            <select id="seller-listing-format" name="listingFormat" required>
-                                <option value="auction">Auction</option><option value="buy_now">Buy Now</option><option value="auction_buy_now">Auction + Buy Now</option>
-                            </select>
-                            <div id="seller-auction-pricing">
-                                <label for="seller-starting-bid">Starting price (INR)</label>
-                                <input id="seller-starting-bid" name="startingBid" type="number" min="1" step="1" aria-describedby="seller-starting-help seller-listing-error" required>
-                                <div class="seller-inline-help"><p class="bid-minimum" id="seller-starting-help">Set the first bid you would accept.</p><details class="seller-help"><summary>Starting price help</summary><p>A lower start may invite more bids; prototype guidance uses sample listings only.</p></details></div>
-                                <label for="seller-bid-increment">Bid increment</label>
-                                <select id="seller-bid-increment" name="bidIncrement" required></select>
-                                <p class="bid-minimum">Each new bid increases by at least this amount. <span id="seller-increment-recommendation"></span></p>
-                            </div>
-                            <div id="seller-buy-now-controls">
-                                <label for="seller-buy-now">Buy Now price (INR)</label>
-                                <input id="seller-buy-now" name="buyNowPrice" type="number" min="1" step="1" aria-describedby="seller-listing-error">
-                                <div class="seller-inline-help"><p class="bid-minimum">Must be above the valid current or starting auction price.</p><details class="seller-help"><summary>Buy Now help</summary><p>Buy Now closes bidding at this displayed amount.</p></details></div>
-                            </div>
-                            <p class="seller-price-guidance" id="seller-price-guidance" aria-live="polite">Prototype price guidance appears when sample data is sufficient.</p>
-                            <div id="seller-reserve-controls" hidden><label for="seller-reserve-mode">Reserve price</label>
-                                <select id="seller-reserve-mode" name="reservePriceMode"><option value="none">No reserve</option><option value="set">Set a reserve</option></select>
-                                <div id="seller-reserve-price-wrap" hidden><label for="seller-reserve-price">Reserve price (INR)</label><input id="seller-reserve-price" name="reservePrice" type="number" min="1" step="1"></div>
-                            </div>
-                        </fieldset>
-                    </details>
-                    <details class="seller-form-section" data-seller-section="fulfilment">
-                        <summary>6. Duration and fulfilment</summary>
-                        <fieldset><legend>Auction duration</legend>
-                            <div id="seller-auction-duration-wrap"><label for="seller-auction-duration">Duration</label>
-                                <select id="seller-auction-duration" name="auctionDurationHours" required></select>
-                                <p class="bid-minimum">Seven days gives more buyers time to discover your listing.</p></div>
-                            <div id="seller-auto-relist-wrap"><label for="seller-auto-relist">If the item does not sell</label>
-                                <select id="seller-auto-relist" name="autoRelist"><option value="decide">Let me decide</option><option value="once">Automatically relist once</option><option value="three">Automatically relist up to 3 times</option></select></div>
-                            <details class="seller-help" id="seller-relist-help"><summary>Automatic relisting</summary><p>Eligible only after second-chance offers end and recovery checks pass. You can disable future relists.</p></details>
-                            <label for="seller-fulfilment-method">How can the buyer receive the item?</label>
-                            <select id="seller-fulfilment-method" name="fulfilmentMethod" aria-describedby="seller-fulfilment-help seller-listing-error" required></select>
-                            <label class="seller-confirmation"><input id="seller-meet-inspect" name="meetAndInspectAvailable" type="checkbox" checked> Public meet and inspect available</label>
-                            <p class="bid-minimum" id="seller-fulfilment-help">Collection is arranged at an appropriate public location. Prototype shipping does not book a courier or collect payment.</p>
-                            <p class="bid-minimum" id="seller-fulfilment-recommendation"></p>
-                            <label for="seller-location">Approximate Mumbai locality</label>
-                            <select id="seller-location" name="location" aria-describedby="seller-listing-error" required></select>
-                            <p class="bid-minimum">Never enter a home address. Only the selected city or approximate locality is stored.</p>
-                        </fieldset>
-                    </details>
-                    <details class="seller-form-section seller-review-group" data-seller-section="review">
-                        <summary>7. Review and publish</summary>
-                        <fieldset><legend>Review your listing</legend>
-                            <ul class="seller-review-checklist" id="seller-review-checklist" aria-label="Submission checklist">
-                                <li data-check="product">Product identified</li><li data-check="photo">Main photo selected</li>
-                                <li data-check="condition">Condition declared</li><li data-check="defects">Defects disclosed</li>
-                                <li data-check="details">Required category details complete</li><li data-check="format">Selling format selected</li>
-                                <li data-check="pricing">Pricing valid</li><li data-check="duration">Duration selected where relevant</li>
-                                <li data-check="fulfilment">Fulfilment option selected</li><li data-check="acknowledgement">Seller acknowledgement accepted</li>
-                            </ul>
-                            <dl class="seller-review-summary">
-                                <div><dt>Item</dt><dd id="seller-summary-title">Add an item title</dd></div>
-                                <div><dt>Brand / model</dt><dd id="seller-summary-brand">Not entered</dd></div>
-                                <div><dt>Category and condition</dt><dd id="seller-summary-category">Not selected</dd></div>
-                                <div><dt>Description</dt><dd id="seller-summary-description">Not entered</dd></div>
-                                <div><dt>Photos</dt><dd id="seller-summary-photos">Main photo required</dd></div>
-                                <div><dt>Location</dt><dd id="seller-summary-location">Not entered</dd></div>
-                                <div><dt>Estimated item value</dt><dd id="seller-summary-estimated-value">Not entered</dd></div>
-                                <div><dt>Fulfilment</dt><dd id="seller-summary-fulfilment">In-person collection</dd></div>
-                                <div><dt>Specifications</dt><dd id="seller-summary-specifications">None added</dd></div>
-                                <div><dt>Starting price</dt><dd id="seller-summary-starting-bid">Not entered</dd></div>
-                                <div><dt>Bid increment</dt><dd id="seller-summary-bid-increment"></dd></div>
-                                <div><dt>Buy Now</dt><dd id="seller-summary-buy-now">Not set</dd></div>
-                                <div><dt>Format</dt><dd id="seller-summary-format">Auction</dd></div>
-                                <div><dt>Duration</dt><dd id="seller-summary-duration">7 days</dd></div>
-                                <div id="seller-summary-reserve-row" hidden><dt>Reserve</dt><dd id="seller-summary-reserve">None</dd></div>
-                            </dl>
-                            <label class="seller-confirmation"><input id="seller-acknowledgement" name="sellerAcknowledgement" type="checkbox"> I confirm this listing is accurate and I am authorized to sell this item.</label>
-                            <p class="bid-error" id="seller-listing-error" role="alert"></p>
-                            <div class="bid-actions seller-review-actions">
-                                <button class="bid-cancel" id="cancel-seller-listing" type="button">Cancel</button>
-                                <button class="bid-cancel" id="seller-save-draft" type="button">Save draft</button>
-                                <button class="bid-cancel" id="seller-preview-listing" type="button">Preview listing</button>
-                                <button class="primary-button" type="submit">Submit for review</button>
-                            </div>
-                        </fieldset>
-                    </details>
-                </form>
-                <p class="bid-success" id="seller-listing-success" role="status" hidden></p>
-                <button class="primary-button" id="seller-listing-done" type="button" hidden>Done</button>
+                <h2 id="seller-listing-title">Create a listing (deprecated)</h2>
+                <p class="bid-minimum">This dialog has been superseded by the full-page sell workspace. Please use the workspace instead.</p>
             </div>
         </dialog>
 
@@ -850,6 +718,364 @@
                 <div id="public-profile-content"></div>
             </div>
         </section>
+
+        <!-- Sell Workspace V3: Full-page three-step flow -->
+        <div id="sell-workspace" class="sell-workspace" hidden>
+            <div class="sell-workspace-header">
+                <div class="sell-workspace-header-top">
+                    <button class="sell-workspace-back" id="sell-workspace-back" type="button" aria-label="Back to marketplace">← Back to marketplace</button>
+                    <h1>Create and publish a listing</h1>
+                </div>
+            </div>
+
+            <div class="sell-workspace-step-indicator">
+                <div class="step-item step-active" data-step="1">
+                    <span class="step-number">1</span>
+                    <span class="step-label">Create</span>
+                </div>
+                <div class="step-item step-pending" data-step="2">
+                    <span class="step-number">2</span>
+                    <span class="step-label">Promote</span>
+                </div>
+                <div class="step-item step-pending" data-step="3">
+                    <span class="step-number">3</span>
+                    <span class="step-label">Review</span>
+                </div>
+            </div>
+
+            <div class="sell-workspace-content">
+                <!-- Step 1: Create Listing -->
+                <div class="sell-workspace-step sell-workspace-step-1">
+                    <div class="sell-workspace-step-container">
+                        <h2 id="step-1-title" tabindex="-1">Step 1: Create your listing</h2>
+                        <p class="sell-workspace-step-description">Describe your item, choose how to sell, then review and publish. This browser-local research flow does not contact a moderator or create a real transaction. Do not enter personal addresses, payment details or sensitive information.</p>
+
+                        <!-- Seller form content will be rendered here by seller-ui.js -->
+                        <form class="seller-listing-form" id="seller-listing-form" novalidate>
+                            <details class="seller-form-section" data-seller-section="product" open>
+                                <summary>1. Product<br><span class="seller-section-subtitle">Tell buyers exactly what you're selling</span></summary>
+                                <fieldset><legend>What are you selling?</legend>
+                                    <label for="seller-category">Category</label>
+                                    <select id="seller-category" name="category" aria-describedby="seller-listing-error" required></select>
+                                    <label for="seller-subcategory">Subcategory</label>
+                                    <select id="seller-subcategory" name="subcategory" aria-describedby="seller-listing-error" required></select>
+                                    <label for="seller-brand-model">Brand or maker</label>
+                                    <input id="seller-brand-model" name="brandModel" type="text" maxlength="100" aria-describedby="seller-listing-error">
+                                    <label for="seller-model">Model (if relevant)</label>
+                                    <input id="seller-model" name="model" type="text" maxlength="100">
+                                    <label for="seller-item-title">Listing title</label>
+                                    <input id="seller-item-title" name="title" type="text" maxlength="60" aria-describedby="seller-title-count seller-listing-error" required>
+                                    <p class="seller-character-count" id="seller-title-count" aria-live="polite">0 / 60</p>
+                                    <div id="seller-estimated-value-wrap"><label for="seller-estimated-value">Estimated item value (INR)</label>
+                                        <input id="seller-estimated-value" name="estimatedValue" type="number" min="1" step="1"></div>
+                                </fieldset>
+                            </details>
+                            <details class="seller-form-section" data-seller-section="photos">
+                                <summary>2. Photos<br><span class="seller-section-subtitle">Clear photos help buyers understand condition</span></summary>
+                                <fieldset><legend>Guided photo plan</legend>
+                                    <label for="seller-photo-purpose">Photo purpose</label>
+                                    <select id="seller-photo-purpose" name="photoPurpose"></select>
+                                    <label for="seller-photos">Choose photos</label>
+                                    <input id="seller-photos" name="photos" type="file" accept="image/*" multiple aria-describedby="seller-photo-note seller-listing-error">
+                                    <p class="bid-minimum" id="seller-photo-note">Add at least 3 where possible (up to 10). These are temporary previews in this browser session; files may need selecting again after a refresh.</p>
+                                    <div id="seller-photo-guidance" class="seller-photo-guidance"></div>
+                                    <div class="seller-photo-previews" id="seller-photo-previews"></div>
+                                </fieldset>
+                            </details>
+                            <details class="seller-form-section" data-seller-section="condition">
+                                <summary>3. Condition<br><span class="seller-section-subtitle">Describe wear and known issues honestly</span></summary>
+                                <fieldset><legend>How would you describe its condition?</legend>
+                                    <div class="condition-selector">
+                                        <div class="condition-option">
+                                            <input type="radio" id="condition-likenew" name="condition" value="A+" required>
+                                            <label for="condition-likenew" class="condition-label">
+                                                <strong>Like New</strong>
+                                                <em>Minimal or no visible wear</em>
+                                            </label>
+                                        </div>
+                                        <div class="condition-option">
+                                            <input type="radio" id="condition-excellent" name="condition" value="A" required>
+                                            <label for="condition-excellent" class="condition-label">
+                                                <strong>Excellent</strong>
+                                                <em>Light signs of use</em>
+                                            </label>
+                                        </div>
+                                        <div class="condition-option">
+                                            <input type="radio" id="condition-good" name="condition" value="B" required>
+                                            <label for="condition-good" class="condition-label">
+                                                <strong>Good</strong>
+                                                <em>Visible normal wear</em>
+                                            </label>
+                                        </div>
+                                        <div class="condition-option">
+                                            <input type="radio" id="condition-fair" name="condition" value="C" required>
+                                            <label for="condition-fair" class="condition-label">
+                                                <strong>Fair</strong>
+                                                <em>Clear wear or disclosed issues</em>
+                                            </label>
+                                        </div>
+                                        <div class="condition-option">
+                                            <input type="radio" id="condition-defective" name="condition" value="defective" required>
+                                            <label for="condition-defective" class="condition-label">
+                                                <strong>Defective</strong>
+                                                <em>Known functional problem</em>
+                                            </label>
+                                        </div>
+                                    </div>
+                                    <p class="seller-condition-guidance" id="seller-condition-guidance">Condition is seller-declared, not Urbids-verified.</p>
+                                    <label for="seller-known-defects">Known defects</label>
+                                    <textarea id="seller-known-defects" name="knownDefects" rows="3" maxlength="500" aria-describedby="seller-defects-help seller-defects-count"></textarea>
+                                    <p class="bid-minimum" id="seller-defects-help">Mention scratches, damage, missing parts, repairs or functional problems.</p>
+                                    <p class="seller-character-count" id="seller-defects-count" aria-live="polite">0 / 500</p>
+                                    <label class="seller-confirmation"><input id="seller-defects-confirmed" name="defectsConfirmed" type="checkbox"> I have disclosed all known defects.</label>
+                                </fieldset>
+                            </details>
+                            <details class="seller-form-section" data-seller-section="details">
+                                <summary>4. Product details<br><span class="seller-section-subtitle">Add the specifications buyers care about</span></summary>
+                                <fieldset class="seller-specifications"><legend>Category-specific details</legend>
+                                    <p class="bid-minimum">Only details relevant to this item are shown. Never enter full serial numbers or credentials.</p>
+                                    <div id="seller-specification-fields" class="seller-specification-fields"></div>
+                                    <details class="seller-help" id="seller-proof-help" hidden><summary>Proof of purchase</summary><p>Select whether proof is available; do not enter receipt numbers or upload private documents.</p></details>
+                                    <details class="seller-help" id="seller-activation-help" hidden><summary>Activation lock</summary><p>Only list a device you can lawfully transfer with account locks removed. Never share credentials.</p></details>
+                                    <label for="seller-included-items">Included items / accessories</label>
+                                    <textarea id="seller-included-items" name="includedItems" rows="2" maxlength="500"></textarea>
+                                    <label for="seller-description">Description</label>
+                                    <textarea id="seller-description" name="description" rows="4" maxlength="2000" aria-describedby="seller-description-count seller-listing-error" required></textarea>
+                                    <p class="seller-character-count" id="seller-description-count" aria-live="polite">0 / 2000</p>
+                                    <label for="seller-reference">Optional seller reference number</label>
+                                    <input id="seller-reference" name="sellerReference" type="text" maxlength="40">
+                                </fieldset>
+                            </details>
+                            <details class="seller-form-section" data-seller-section="format">
+                                <summary>5. Selling format and price<br><span class="seller-section-subtitle">Choose Auction, Buy Now, or both</span></summary>
+                                <fieldset><legend>Choose how to sell</legend>
+                                    <div class="format-selector-container">
+                                        <div class="format-card">
+                                            <input type="radio" id="format-auction" name="listingFormat" value="auction" required>
+                                            <label for="format-auction">
+                                                <div class="format-card-title">Auction</div>
+                                                <div class="format-card-description">Let buyers compete for the item.</div>
+                                            </label>
+                                        </div>
+                                        <div class="format-card">
+                                            <input type="radio" id="format-buynow" name="listingFormat" value="buy_now" required>
+                                            <label for="format-buynow">
+                                                <div class="format-card-title">Buy Now</div>
+                                                <div class="format-card-description">Sell immediately at your chosen price.</div>
+                                            </label>
+                                        </div>
+                                        <div class="format-card">
+                                            <input type="radio" id="format-both" name="listingFormat" value="auction_buy_now" required>
+                                            <label for="format-both">
+                                                <div class="format-card-title">Auction + Buy Now</div>
+                                                <div class="format-card-description">Give buyers both options.</div>
+                                            </label>
+                                        </div>
+                                    </div>
+
+                                    <div class="pricing-controls-wrapper">
+                                        <div class="pricing-fields-row">
+                                            <div id="seller-auction-price-group" hidden>
+                                                <label for="seller-starting-bid">Starting price</label>
+                                                <div class="price-input-wrapper">
+                                                    <span class="price-currency">₹</span>
+                                                    <input id="seller-starting-bid" name="startingBid" type="number" min="1" step="1" aria-describedby="seller-listing-error" required>
+                                                </div>
+                                            </div>
+                                            <div id="seller-buynow-price-group" hidden>
+                                                <label for="seller-buy-now-price">Buy Now price</label>
+                                                <div class="price-input-wrapper">
+                                                    <span class="price-currency">₹</span>
+                                                    <input id="seller-buy-now-price" name="buyNowPrice" type="number" min="1" step="1" aria-describedby="seller-listing-error" required>
+                                                </div>
+                                            </div>
+                                        </div>
+
+                                        <div id="seller-auction-controls" hidden>
+                                            <div class="bid-increment-group">
+                                                <label for="bid-increment-selector">Bid increment</label>
+                                                <p class="bid-increment-recommendation" id="bid-increment-recommendation"></p>
+                                                <div class="bid-increment-selector">
+                                                    <div class="bid-increment-option">
+                                                        <input type="radio" id="bid-increment-1" name="bidIncrement" value="1">
+                                                        <label for="bid-increment-1" class="bid-increment-label">₹1</label>
+                                                    </div>
+                                                    <div class="bid-increment-option">
+                                                        <input type="radio" id="bid-increment-10" name="bidIncrement" value="10">
+                                                        <label for="bid-increment-10" class="bid-increment-label">₹10</label>
+                                                    </div>
+                                                    <div class="bid-increment-option">
+                                                        <input type="radio" id="bid-increment-100" name="bidIncrement" value="100">
+                                                        <label for="bid-increment-100" class="bid-increment-label">₹100</label>
+                                                    </div>
+                                                    <div class="bid-increment-option">
+                                                        <input type="radio" id="bid-increment-1000" name="bidIncrement" value="1000">
+                                                        <label for="bid-increment-1000" class="bid-increment-label">₹1,000</label>
+                                                    </div>
+                                                </div>
+                                            </div>
+
+                                            <div class="auction-settings-row">
+                                                <div class="auction-setting-group">
+                                                    <label for="seller-auction-duration">Auction duration</label>
+                                                    <select id="seller-auction-duration" name="auctionDurationHours" aria-describedby="seller-listing-error" required></select>
+                                                </div>
+                                                <div class="auction-setting-group">
+                                                    <label for="seller-auto-relist">If the item doesn't sell</label>
+                                                    <select id="seller-auto-relist" name="autoRelist" aria-describedby="seller-listing-error" required></select>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </fieldset>
+                            </details>
+                            <details class="seller-form-section" data-seller-section="fulfilment">
+                                <summary>6. Handover & location<br><span class="seller-section-subtitle">Choose how buyers can receive or inspect it</span></summary>
+                                <fieldset><legend>How will the buyer get this item?</legend>
+                                    <label for="seller-fulfilment-method">Handover option</label>
+                                    <select id="seller-fulfilment-method" name="fulfilmentMethod" aria-describedby="seller-listing-error" required></select>
+                                    <div id="seller-meetup-options" hidden>
+                                        <label class="seller-confirmation"><input id="seller-meet-inspect" name="meetAndInspectAvailable" type="checkbox"> Available for meet and inspect</label>
+                                    </div>
+                                    <label for="seller-location">Your location</label>
+                                    <select id="seller-location" name="location" aria-describedby="seller-listing-error" required></select>
+                                </fieldset>
+                            </details>
+                            <details class="seller-form-section" data-seller-section="summary">
+                                <summary>7. Review summary<br><span class="seller-section-subtitle">Check everything before moving on</span></summary>
+                                <div class="seller-review-summary" id="seller-review-summary"></div>
+                            </details>
+                            <div class="seller-form-actions">
+                                <button class="secondary-button" id="seller-cancel" type="button">Cancel</button>
+                                <button class="primary-button" id="seller-step-1-next" type="button">Continue to promotion</button>
+                            </div>
+                            <div id="seller-listing-error" class="seller-listing-error" role="alert" hidden></div>
+                        </form>
+                    </div>
+                </div>
+
+                <!-- Step 2: Promote Listing -->
+                <div class="sell-workspace-step sell-workspace-step-2" hidden>
+                    <div class="sell-workspace-step-container">
+                        <h2 id="step-2-title" tabindex="-1">Step 2: Promotion (optional)</h2>
+                        <p class="sell-workspace-step-description">Choose how to present your listing. This is a prototype research step with no real fees or ranking guarantees.</p>
+
+                        <div class="promotion-tiers">
+                            <div class="promotion-tier" data-tier="standard" data-tier-name="Standard">
+                                <input type="radio" name="promotionTier" id="promo-standard" value="standard" checked>
+                                <label for="promo-standard">
+                                    <strong>Standard</strong>
+                                    <span class="promotion-price">₹0</span>
+                                    <p>Normal placement (default)</p>
+                                </label>
+                            </div>
+                            <div class="promotion-tier" data-tier="spotlight" data-tier-name="Spotlight">
+                                <input type="radio" name="promotionTier" id="promo-spotlight" value="spotlight">
+                                <label for="promo-spotlight">
+                                    <strong>Spotlight</strong>
+                                    <span class="promotion-price">₹49</span>
+                                    <p class="promotion-prototype-note">Prototype only • No fee is collected</p>
+                                </label>
+                            </div>
+                            <div class="promotion-tier" data-tier="featured" data-tier-name="Featured">
+                                <input type="radio" name="promotionTier" id="promo-featured" value="featured">
+                                <label for="promo-featured">
+                                    <strong>Featured</strong>
+                                    <span class="promotion-price">₹99</span>
+                                    <p class="promotion-prototype-note">Prototype only • No fee is collected</p>
+                                </label>
+                            </div>
+                            <div class="promotion-tier" data-tier="showcase" data-tier-name="Showcase">
+                                <input type="radio" name="promotionTier" id="promo-showcase" value="showcase">
+                                <label for="promo-showcase">
+                                    <strong>Showcase</strong>
+                                    <span class="promotion-price">₹199</span>
+                                    <p class="promotion-prototype-note">Prototype only • No fee is collected</p>
+                                </label>
+                            </div>
+                        </div>
+
+                        <div class="promotion-info">
+                            <p><strong>How promotion works:</strong> Promoted listings show a badge and may appear higher in discovery. This prototype does not promise specific views, clicks, bids or guaranteed placement. Promotion does not affect auction timing, bid validity, seller reputation or transaction protection.</p>
+                        </div>
+
+                        <div class="sell-workspace-step-actions">
+                            <button class="secondary-button" id="seller-step-2-back" type="button">Back</button>
+                            <button class="primary-button" id="seller-step-2-next" type="button">Review and publish</button>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Step 3: Review & Publish -->
+                <div class="sell-workspace-step sell-workspace-step-3" hidden>
+                    <div class="sell-workspace-step-container">
+                        <h2 id="step-3-title" tabindex="-1">Step 3: Review and publish</h2>
+                        <p class="sell-workspace-step-description">Review your listing as buyers will see it. This browser-local research flow does not contact a moderator or create a real transaction.</p>
+
+                        <!-- Review Preview Section (BATCH 7) -->
+                        <div class="review-preview">
+                            <div class="preview-section">
+                                <h3>Your listing</h3>
+
+                                <!-- Photos -->
+                                <div id="review-photos-preview" class="preview-photos"></div>
+
+                                <!-- Basic Info -->
+                                <div class="preview-basic">
+                                    <h4 id="review-title"></h4>
+                                    <p id="review-category"></p>
+                                    <p id="review-condition"></p>
+                                </div>
+
+                                <!-- Description and Specs -->
+                                <div id="review-description"></div>
+                                <div id="review-specs"></div>
+
+                                <!-- Pricing and Duration -->
+                                <div id="review-pricing"></div>
+                                <div id="review-duration"></div>
+
+                                <!-- Fulfilment -->
+                                <div id="review-fulfilment"></div>
+
+                                <!-- Promotion -->
+                                <div id="review-promotion"></div>
+                            </div>
+                        </div>
+
+                        <!-- Review Checklist (BATCH 7) -->
+                        <div class="review-checklist">
+                            <h3>Before publishing</h3>
+                            <ul>
+                                <li><input type="checkbox" id="check-product"> Product identified correctly</li>
+                                <li><input type="checkbox" id="check-main-photo"> Main photo clear and informative</li>
+                                <li><input type="checkbox" id="check-condition"> Condition clearly stated</li>
+                                <li><input type="checkbox" id="check-defects"> Any defects disclosed</li>
+                                <li><input type="checkbox" id="check-details"> Details complete</li>
+                                <li><input type="checkbox" id="check-pricing"> Pricing set</li>
+                                <li><input type="checkbox" id="check-duration"> Auction duration chosen</li>
+                                <li><input type="checkbox" id="check-fulfilment"> Fulfilment method chosen</li>
+                                <li><input type="checkbox" id="check-promotion"> Promotion choice selected</li>
+                                <li><input type="checkbox" id="check-accuracy"> I confirm this information is accurate</li>
+                            </ul>
+                        </div>
+
+                        <div class="sell-workspace-step-actions">
+                            <button class="secondary-button" id="step3-back" type="button">← Back to edit</button>
+                            <button class="secondary-button" id="step3-save-draft" type="button">Save as draft</button>
+                            <button class="primary-button" id="step3-publish" type="button" disabled>Publish listing</button>
+                        </div>
+
+                        <p class="publish-info">Publishing stores this listing in your browser for research. No real marketplace moderator or buyer is contacted.</p>
+
+                        <div id="seller-publish-success" class="seller-publish-success" hidden>
+                            <p>✓ Your listing has been published and stored in this browser.</p>
+                            <button class="primary-button" id="seller-publish-done" type="button">Done</button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
     </main>
 
     <dialog class="bid-dialog public-info-dialog" id="public-info-dialog" aria-labelledby="public-info-title">
@@ -906,7 +1132,7 @@
             </article>
             <article id="public-privacy" data-public-title="Prototype privacy notice" hidden>
                 <p>Prototype accounts are browser-local simulations, not real authentication. They work only in this browser and do not work across devices or browsers. Other visitors cannot interact with your account. Clearing this browser's site data can remove the account and its activity.</p>
-                <p>Usability events record action types, timestamps and a small set of coded details. They do not include display names, account IDs, search text, bid input text or private maximum amounts. Optional written feedback is stored separately in this browser.</p>
+                <p>Usability events record only actions, timestamps, fictional profiles and research tasks, an optional anonymous participant code and a small set of coded details. They do not include search text, bid input text or private maximum amounts. Optional written feedback is stored separately.</p>
                 <p>Do not enter sensitive information in your display name, feedback, listings or other fields. Do not enter contact details, addresses, full device identifiers or payment information. No real payment data should be entered anywhere.</p>
                 <p>Feedback and events are not sent to a research team. A facilitator can review or export records from this browser during a session. Clearing this site's browser data removes local prototype records, but not any reports already downloaded.</p>
                 <p>The public website host and external image providers receive requests when pages or images load. Browser-local prototype records are not uploaded by the app; this notice does not describe those providers' own practices.</p>
@@ -936,6 +1162,10 @@
             <button class="secondary-button" id="share-feedback-footer" type="button">Share feedback</button>
         </div>
         <p class="container footer-prototype-note">Buy and sell quality pre-owned products • Research prototype • No real payments or transactions.</p>
+        <div class="container" id="prototype-left-message">
+            <p>You have left the prototype. You can close this browser tab.</p>
+            <button class="secondary-button" id="return-to-prototype" type="button">Return to prototype</button>
+        </div>
     </footer>
     <script type="module" src="app.js"></script>
 </body>

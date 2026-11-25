@@ -223,18 +223,6 @@ export function createSellerSubmission(fields, now = new Date(), random = Math.r
     return { ok: true, data: submission, submission };
 }
 
-export function removeSellerSubmissionsForUser(userId) {
-    if (!isPrototypeUserId(userId)) return { ok: false, code: SERVICE_ERROR_CODE.invalidInput };
-    const submissions = loadSellerSubmissions();
-    const removed = submissions.filter(submission => submission?.sellerUserId === userId);
-    if (removed.length) {
-        const next = submissions.filter(submission => submission?.sellerUserId !== userId);
-        if (!saveSellerSubmissions(next)) return { ok: false, code: SERVICE_ERROR_CODE.storageFailed };
-    }
-    if (!deleteSellerDraft(userId).ok) return { ok: false, code: SERVICE_ERROR_CODE.storageFailed };
-    return { ok: true, data: removed };
-}
-
 export function getSubmissionQualityChecklist(submission) {
     if (!submission || typeof submission !== 'object' || Array.isArray(submission)) return [];
     const specifications = normalizeSpecifications(submission.specifications);

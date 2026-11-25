@@ -224,7 +224,8 @@ export function createAuctionManagementService({ listingStates, transactionStore
             reservePriceMode: fields.reservePriceMode,
             reservePrice: fields.reservePrice,
             auctionDurationHours: fields.auctionDurationHours,
-            auctionEndsAt: new Date(now() + fields.auctionDurationHours * 3600000).toISOString()
+            auctionEndsAt: new Date(now() + fields.auctionDurationHours * 3600000).toISOString(),
+            promotionTier: 'standard'
         };
     }
 

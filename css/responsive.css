@@ -267,7 +267,10 @@
         grid-template-columns: repeat(2, minmax(0, 1fr));
     }
 
-    .explore-more-button { min-width: 0; overflow-wrap: anywhere; }
+    .explore-more-button {
+        min-width: 0;
+        overflow-wrap: anywhere;
+    }
 
     .condition-filter select,
     .locality-filter select,
@@ -316,6 +319,10 @@
     .listing-actions button {
         min-height: 44px;
         font-size: var(--text-label);
+    }
+
+    .prototype-tools summary {
+        min-height: 44px;
     }
 
     .community-listing-label,
@@ -392,6 +399,7 @@
 
     button,
     .listing-title-button,
+    .prototype-tool-button,
     .account-action,
     .account-subtab,
     .account-tabs button,
@@ -401,6 +409,16 @@
     .listing-gallery-arrow,
     .category-nav-button,
     .subcategory-nav-button,
+    .listing-filter-panel > summary,
+    .mobile-menu > summary {
+        min-height: 44px;
+        min-width: 44px;
+    }
+
+    .bid-dialog input:not([type="checkbox"]):not([type="radio"]),
+    .bid-dialog select,
+    .bid-dialog textarea {
+        min-height: 44px;
         /* Keep iOS from zooming when a text control receives focus. */
         font-size: var(--text-input);
     }
@@ -466,6 +484,9 @@
         gap: 8px;
     }
 
+    .admin-review-actions {
+        width: 100%;
+    }
 }
 
 @media (max-width: 480px) {
@@ -613,6 +634,14 @@
         grid-template-columns: 1fr 1fr;
     }
 
+    .scenario-task-content {
+        grid-template-columns: 1fr;
+    }
+
+    .scenario-task-actions,
+    .prototype-mode-actions {
+        justify-content: flex-start;
+    }
 }
 
 @media (prefers-reduced-motion: reduce) {

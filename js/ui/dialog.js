@@ -53,9 +53,7 @@ export function createDialogController(documentRef = document) {
         const inheritedTarget = currentDialog ? returnFocusTargets.get(currentDialog) : null;
         returnFocusTargets.set(dialog, returnFocusTarget ?? inheritedTarget ?? documentRef.activeElement);
         dialog.showModal();
-        const heading = dialog.querySelector('h2');
-        if (heading) heading.tabIndex = -1;
-        (dialog.querySelector('[autofocus]') || heading || firstFocusable(dialog))?.focus({ preventScroll: true });
+        (dialog.querySelector('[autofocus]') || firstFocusable(dialog))?.focus({ preventScroll: true });
     }
 
     function close(dialog, { restoreFocus = true } = {}) {

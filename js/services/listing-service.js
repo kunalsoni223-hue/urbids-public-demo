@@ -1,6 +1,7 @@
 import { config } from '../config.js';
-import { listings as staticListings } from '../data/sample-listings.js';
-import { CATEGORY_LABELS, CONDITION_GRADE_LABELS, DEFAULT_DEMO_USER_ID, LISTING_FORMAT, SELLER_LISTING_ID_PREFIX, SUBCATEGORY_LABELS, SUBMISSION_STATUS, TRANSACTION_STATUS } from '../core/constants.js';
+import { listings as staticListings, sampleListingSeedTime } from '../data/sample-listings.js';
+import { CATEGORY_LABELS, CONDITION_GRADE_LABELS, DEFAULT_DEMO_USER_ID, LISTING_FORMAT, SELLER_LISTING_ID_PREFIX, STORAGE_KEYS, SUBCATEGORY_LABELS, SUBMISSION_STATUS, TRANSACTION_STATUS } from '../core/constants.js';
+import { readJSON, writeJSON } from '../core/storage.js';
 import { getDemoUser } from '../data/demo-users.js';
 import { isPrototypeUserId } from '../core/normalization.js';
 import { validateSellerListing } from '../core/validation.js';
@@ -243,6 +244,22 @@ export function createPublishedSellerListing(submission, imageUrl = null) {
         auctionEndsAt: endsAt.toISOString(),
         auctionEndLabel: `Ends ${endsAt.toLocaleDateString(config.locale, { day: 'numeric', month: 'short' })}`
     });
+}
+
+export function initializeSampleTiming(listingStates, seedTime = sampleListingSeedTime) {
+    let savedSeedTime = readJSON(STORAGE_KEYS.sampleSeedTime, null, Number.isSafeInteger);
+    if (savedSeedTime === null) {
+        if (!writeJSON(STORAGE_KEYS.sampleSeedTime, seedTime)) return false;
+        savedSeedTime = seedTime;
+    }
+    const offset = savedSeedTime - seedTime;
+    for (const sample of staticListings) {
+        const listing = listingStates.get(sample.id);
+        if (!listing || listing.source === 'seller_submission') continue;
+        listing.listedAt = new Date(Date.parse(listing.listedAt) + offset).toISOString();
+        listing.auctionEndsAt = new Date(Date.parse(listing.auctionEndsAt) + offset).toISOString();
+    }
+    return true;
 }
 
 export function loadListingStates(submissions, resolveImage = () => null, now = new Date()) {

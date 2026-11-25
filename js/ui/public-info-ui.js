@@ -10,9 +10,18 @@ export function createPublicInfoUI({ documentRef = document, dialogController, o
             event.preventDefault();
             const mobileMenu = documentRef.querySelector('.mobile-menu');
             if (mobileMenu) mobileMenu.open = false;
-            const footer = documentRef.getElementById('public-help');
-            footer.scrollIntoView({ block: 'start' });
-            footer.querySelector('a').focus({ preventScroll: true });
+            const faqTopic = topics.find(item => item.id === 'public-faq');
+            if (!faqTopic) return;
+            topics.forEach(item => { item.hidden = item !== faqTopic; });
+            heading.textContent = faqTopic.dataset.publicTitle;
+            dialog.querySelectorAll('[data-public-topic]').forEach(item => {
+                if (item.dataset.publicTopic === faqTopic.id) item.setAttribute('aria-current', 'page');
+                else item.removeAttribute('aria-current');
+            });
+            faqTopic.querySelectorAll('details').forEach(item => { item.open = false; });
+            dialogController.open(dialog, link);
+            dialog.scrollTop = 0;
+            heading.focus({ preventScroll: true });
         });
     });
 

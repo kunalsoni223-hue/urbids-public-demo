@@ -1,0 +1,59 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="robots" content="noindex, nofollow">
+    <title>Local research data | Urbids</title>
+    <link rel="icon" type="image/svg+xml" href="./favicon.svg">
+    <link rel="stylesheet" href="./css/tokens.css">
+    <link rel="stylesheet" href="./css/base.css">
+    <link rel="stylesheet" href="./css/components.css">
+</head>
+<body>
+    <main class="container" style="padding-block: 4rem;">
+        <h1>Local research data</h1>
+        <p>For facilitators: this page accesses feedback and coded events on this browser and origin only. It is not password-protected and does not collect data from other visitors.</p>
+        <p>Export may contain written feedback. Handle the downloaded file as participant data.</p>
+        <button id="export-research" type="button">Export research JSON</button>
+        <button id="reset-research" type="button">Clear local research data</button>
+        <p id="research-status" role="status" aria-live="polite"></p>
+        <a href="./index.html">Return to marketplace</a>
+    </main>
+    <script type="module">
+        import { createPublicResearchService } from './js/services/public-research-service.js';
+        import { setStorageProblemHandler, subscribeToStorageChanges } from './js/core/storage.js';
+
+        const status = document.getElementById('research-status');
+        const exportButton = document.getElementById('export-research');
+        const resetButton = document.getElementById('reset-research');
+        setStorageProblemHandler(() => {
+            exportButton.disabled = true;
+            resetButton.disabled = true;
+            status.textContent = 'Browser storage could not be read or changed. Check storage permissions and reload.';
+        });
+        const service = createPublicResearchService();
+        subscribeToStorageChanges(() => {
+            exportButton.disabled = true;
+            resetButton.disabled = true;
+            status.textContent = 'Data changed in another tab. Reload before exporting or clearing.';
+        });
+        exportButton.addEventListener('click', () => {
+            const file = new Blob([JSON.stringify(service.getResearchReport(), null, 2)], { type: 'application/json' });
+            const url = URL.createObjectURL(file);
+            const link = document.createElement('a');
+            link.href = url;
+            link.download = 'urbids-research.json';
+            link.click();
+            URL.revokeObjectURL(url);
+            status.textContent = 'Research JSON prepared for download.';
+        });
+        resetButton.addEventListener('click', () => {
+            if (!window.confirm('Clear feedback and research events from this browser? Marketplace data will remain.')) return;
+            status.textContent = service.resetResearchData()
+                ? 'Local feedback and research events cleared.'
+                : 'Research data could not be fully cleared. Check storage permissions and reload.';
+        });
+    </script>
+</body>
+</html>

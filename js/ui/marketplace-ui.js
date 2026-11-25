@@ -1,5 +1,5 @@
 import { CATEGORY, CATEGORY_LABELS, CATEGORY_NAV_LABELS, CONDITION_GRADE_LABELS, DISPUTE_RESOLUTION, DISPUTE_RESOLUTION_LABELS, FILTER_ALL, FULFILMENT_METHOD, LISTING_FORMAT, SPECIFICATION_FIELD_LABELS, SUBCATEGORIES_BY_CATEGORY, SUBCATEGORY, SUBCATEGORY_LABELS, TRANSACTION_STATUS, USABILITY_EVENT_TYPE } from '../core/constants.js';
-import { formatCurrency } from '../core/formatting.js';
+import { formatCurrency, listingImageAlt } from '../core/formatting.js';
 import { transactionStatusLabel } from '../services/transaction-service.js';
 import { getDiscoveryShelfListings, listingPlaceholderLabel, sortMarketplaceListings } from '../services/listing-service.js';
 import { announceGlobalStatus } from './status-announcer.js';
@@ -410,7 +410,7 @@ export function createMarketplaceUI({ documentRef = document, state, biddingServ
             image.loading = prioritizeImage ? 'eager' : 'lazy';
             if (prioritizeImage) image.setAttribute('fetchpriority', 'high');
             image.decoding = 'async';
-            image.alt = listing.imageAlt;
+            image.alt = listingImageAlt(listing);
             const imageFallback = documentRef.createElement('div');
             imageFallback.className = `seller-listing-placeholder seller-listing-placeholder-${listing.category}`;
             imageFallback.setAttribute('role', 'img');
@@ -929,7 +929,7 @@ export function createMarketplaceUI({ documentRef = document, state, biddingServ
         listingContainer.addEventListener('click', event => {
             const button = event.target.closest('button[data-action]');
             const card = event.target.closest('.listing-card');
-            if (!card || (!button && event.target.closest('.prototype-tools'))) return;
+            if (!card) return;
             const listingId = card?.dataset.listingId;
             if (!listingId) return;
 
@@ -952,7 +952,7 @@ export function createMarketplaceUI({ documentRef = document, state, biddingServ
                 const nextIndex = (currentIndex + direction + images.length) % images.length;
                 const image = media.querySelector('img.listing-image');
                 image.src = images[nextIndex];
-                image.alt = nextIndex === 0 ? listing.imageAlt : `${listing.title} photo ${nextIndex + 1}`;
+                image.alt = nextIndex === 0 ? listingImageAlt(listing) : `${listing.title} photo ${nextIndex + 1}`;
                 media.dataset.galleryIndex = String(nextIndex);
                 return;
             }
@@ -966,9 +966,6 @@ export function createMarketplaceUI({ documentRef = document, state, biddingServ
             if (button.dataset.action === 'details') actions.openDetails?.(listingId, returnFocus);
             else if (button.dataset.action === 'bid') actions.openBid?.(listingId, returnFocus);
             else if (button.dataset.action === 'buy-now') actions.openBuyNow?.(listingId, returnFocus);
-            else if (button.dataset.action === 'simulate-auction-end') actions.simulateAuctionEnd?.(listingId, returnFocus);
-            else if (button.dataset.action === 'reset-demo-transaction') actions.resetTransaction?.(listingId);
-            else if (button.dataset.action === 'resume-auction-transaction') actions.resumeTransaction?.(listingId, returnFocus);
             else if (button.dataset.action === 'primary') actions.primary?.(listingId);
         });
 

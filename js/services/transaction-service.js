@@ -3,6 +3,7 @@ import { AUCTION_RESERVE_OUTCOME, AUCTION_STATUS, CATEGORY, DEFAULT_DEMO_USER_ID
 import { isValidPurchaseSource, validateInspection, validateMeetup } from '../core/validation.js';
 import { demoUsers, getDemoUser, isDemoUserId } from '../data/demo-users.js';
 import { isPrototypeUserId, isRecord, isStableId, normalizeSpecifications, normalizeTimestamp, uniqueRecords } from '../core/normalization.js';
+import { isValidBidTransition } from './bidding-service.js';
 
 const validStatuses = new Set(Object.values(transactionStatus));
 const transitionRules = new Map([
@@ -172,7 +173,9 @@ function canPerformTransaction({ transaction, listing, event, details, userId, i
     if (listing.secondChanceOffer && [TRANSACTION_EVENT.placeBid, TRANSACTION_EVENT.buyNow, TRANSACTION_EVENT.auctionEnd].includes(event)) return false;
     if (isPaused && disputePausedEvents.has(event)) return false;
     if (event === TRANSACTION_EVENT.placeBid) {
-        return (details.bidderUserId === userId || details.automatic === true) && listing?.sellerUserId !== details.bidderUserId;
+        return (details.bidderUserId === userId || details.automatic === true)
+            && listing.sellerUserId !== details.bidderUserId
+            && isValidBidTransition(listing, getHighestValidBid(transaction.bidHistory), details, now());
     }
     if (buyerEvents.has(event) && transaction.buyerUserId !== userId) return false;
     if (sellerEvents.has(event) && transaction.sellerUserId !== userId) return false;
@@ -886,19 +889,35 @@ export function createTransactionStore({
             let next = null;
 
             if (event === TRANSACTION_EVENT.placeBid && Number.isSafeInteger(details.amount) && details.amount > 0) {
+                const bidHistory = [...current.bidHistory, {
+                    listingId,
+                    bidderUserId: details.bidderUserId,
+                    bidderDisplayName: details.bidderDisplayName || getCurrentUser()?.firstName || 'Kunal',
+                    bidder: details.bidderDisplayName || getCurrentUser()?.firstName || 'Kunal',
+                    amount: details.amount,
+                    auctionExtended: details.auctionExtended === true,
+                    ...(details.automatic === true ? { auto: true } : {}),
+                    ...(details.tiePriority === true ? { tiePriority: true } : {}),
+                    placedAt: details.placedAt || new Date().toISOString()
+                }];
+                const buyNowReached = Number.isSafeInteger(listingStates.get(listingId)?.buyNowPrice)
+                    && details.amount === listingStates.get(listingId).buyNowPrice;
+                const highestBid = buyNowReached ? getHighestValidBid(bidHistory) : null;
                 next = {
                     ...current,
-                    bidHistory: [...current.bidHistory, {
-                        listingId,
-                        bidderUserId: details.bidderUserId,
-                        bidderDisplayName: details.bidderDisplayName || getCurrentUser()?.firstName || 'Kunal',
-                        bidder: details.bidderDisplayName || getCurrentUser()?.firstName || 'Kunal',
-                        amount: details.amount,
-                        auctionExtended: details.auctionExtended === true,
-                        ...(details.automatic === true ? { auto: true } : {}),
-                        ...(details.tiePriority === true ? { tiePriority: true } : {}),
-                        placedAt: details.placedAt || new Date().toISOString()
-                    }]
+                    bidHistory,
+                    ...(buyNowReached ? {
+                        status: transactionStatus.auctionWon,
+                        purchaseSource: PURCHASE_SOURCE.auctionWinner,
+                        reserveOutcome: null,
+                        buyerUserId: highestBid.bidderUserId,
+                        sellerUserId: listingStates.get(listingId)?.sellerUserId || current.sellerUserId,
+                        winner: highestBid.bidderDisplayName || getUser(highestBid.bidderUserId)?.firstName || 'Kunal',
+                        winningBid: highestBid.amount,
+                        transactionPrice: highestBid.amount,
+                        winnerResponseDeadline: new Date(now() + WINNER_CONFIRMATION_WINDOW_MS).toISOString(),
+                        listingSnapshot: createListingSnapshot(listingStates.get(listingId), getListingQuestions)
+                    } : {})
                 };
             } else if (event === TRANSACTION_EVENT.auctionEnd) {
                 const highestBid = getHighestValidBid(current.bidHistory);
@@ -1090,7 +1109,10 @@ export function createTransactionStore({
             if (!persistTransactions(updated)) return null;
             transactions.set(listingId, next);
             const listing = listingStates.get(listingId);
-            if (event === TRANSACTION_EVENT.auctionEnd) notificationService?.notifyAuctionWon({ listing, transaction: next });
+            if (event === TRANSACTION_EVENT.auctionEnd
+                || (event === TRANSACTION_EVENT.placeBid && next.status === transactionStatus.auctionWon)) {
+                notificationService?.notifyAuctionWon({ listing, transaction: next });
+            }
             if (event === TRANSACTION_EVENT.acceptSecondChance) notificationService?.notifyAuctionWon({ listing, transaction: next });
             if (event === TRANSACTION_EVENT.winnerDeclined) {
                 notificationService?.create({

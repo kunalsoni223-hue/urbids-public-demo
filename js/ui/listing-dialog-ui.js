@@ -1,5 +1,5 @@
 import { CATEGORY, DEFAULT_FULFILMENT_METHOD, DISPUTE_RESOLUTION, DISPUTE_RESOLUTION_LABELS, FULFILMENT_METHOD, FULFILMENT_METHOD_LABELS, LISTING_FORMAT, SERVICE_ERROR_CODE, SPECIFICATION_FIELDS_BY_SUBCATEGORY, SPECIFICATION_FIELD_LABELS, TRANSACTION_STATUS, USABILITY_EVENT_TYPE } from '../core/constants.js';
-import { formatCurrency, formatTimeRemaining } from '../core/formatting.js';
+import { formatCurrency, formatTimeRemaining, listingImageAlt } from '../core/formatting.js';
 import { getTransactionTimeline, transactionStatusLabel } from '../services/transaction-service.js';
 import { listingPlaceholderLabel } from '../services/listing-service.js';
 import { normalizeSpecifications } from '../core/normalization.js';
@@ -471,7 +471,7 @@ export function createListingDialogUI({ documentRef = document, state, biddingSe
         activeImages = Array.isArray(listing.images) && listing.images.length
             ? listing.images.filter(imageUrl => typeof imageUrl === 'string' && imageUrl.length > 0)
             : listing.image ? [listing.image] : [];
-        image.alt = listing.imageAlt;
+        image.alt = listingImageAlt(listing);
         image.onerror = () => {
             if (activeImages.length) showImageUnavailable(listing);
         };

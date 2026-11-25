@@ -3,6 +3,7 @@ import { AUCTION_RESERVE_OUTCOME, DEFAULT_DEMO_USER_ID, LISTING_FORMAT, RESERVE_
 import { readRecord, removeStoredValue, writeJSON } from '../core/storage.js';
 import { formatCurrency } from '../core/formatting.js';
 import { isPrototypeUserId, normalizeBidIncrement } from '../core/normalization.js';
+import { validateBid } from '../core/validation.js';
 import { getDemoUser } from '../data/demo-users.js';
 import { loadAutoBids, planProxyBids, saveAutoBids } from './proxy-bidding.js';
 
@@ -17,6 +18,35 @@ export function getHighestValidBid(bidHistory) {
             || (bid.amount === highest.amount && bid.tiePriority === true && highest.tiePriority !== true)
             ? bid : highest;
     }, null);
+}
+
+function bidRulesForListing(listing, currentBid = listing.currentBid) {
+    const increment = normalizeBidIncrement(listing.bidIncrement, currentBid);
+    const bidCeiling = config.auctionRules.maximumListingPrice;
+    const hasBuyNow = Number.isSafeInteger(listing.buyNowPrice);
+    const maximumBid = hasBuyNow ? Math.min(bidCeiling, listing.buyNowPrice) : bidCeiling;
+    const minimumBid = Math.min(currentBid + increment, maximumBid);
+    return { increment, minimumBid, maximumBid,
+        maximumStep: hasBuyNow ? maximumBid
+            : currentBid + Math.floor((maximumBid - currentBid) / increment) * increment };
+}
+
+export function isValidBidTransition(listing, highestBid, details, now) {
+    const endTime = Date.parse(listing.auctionEndsAt);
+    if (listing.listingFormat === LISTING_FORMAT.buyNow
+        || (Number.isFinite(endTime) && endTime <= now)
+        || !isPrototypeUserId(details.bidderUserId)) return false;
+    const currentBid = Math.max(listing.currentBid, highestBid?.amount ?? 0);
+    const { increment, minimumBid, maximumBid } = bidRulesForListing(listing, currentBid);
+    if (!Number.isSafeInteger(details.amount) || details.amount <= 0 || details.amount > maximumBid) return false;
+    if (details.automatic === true && details.tiePriority === true) {
+        return details.amount === currentBid && highestBid?.amount === currentBid
+            && highestBid.bidderUserId !== details.bidderUserId && highestBid.tiePriority !== true;
+    }
+    return details.amount > currentBid && validateBid(details.amount, minimumBid)
+        && (details.automatic === true
+            ? details.amount === maximumBid || (details.amount - currentBid) % increment === 0
+            : details.amount === minimumBid);
 }
 
 export function restoreBids(listingStates) {
@@ -76,33 +106,26 @@ export function createBiddingService(listingStates, transactionStore, userServic
             : listingStates.get(listingId)?.sellerUserId === currentUser.id;
     }
 
-    function persistBids() {
-        const savedBids = Object.fromEntries(Array.from(listingStates, ([listingId, listing]) => [listingId, {
-            currentBid: listing.currentBid,
-            bidCount: listing.bidCount,
-            bidIncrement: listing.bidIncrement,
-            auctionEndsAt: listing.auctionEndsAt,
-            extensionCount: auctionExtensionCounts.get(listingId) || 0,
-            cleanDemoSeed: initialBidState.get(listingId)?.cleanDemoSeed === true,
-            seedAuctionEndsAt: initialBidState.get(listingId)?.cleanDemoSeed
-                ? initialBidState.get(listingId).auctionEndsAt : undefined
-        }]));
+    function persistBids(pendingListing = null, pendingExtensionCount = 0) {
+        const savedBids = Object.fromEntries(Array.from(listingStates, ([listingId, currentListing]) => {
+            const isPending = pendingListing?.id === listingId;
+            const listing = isPending ? pendingListing : currentListing;
+            return [listingId, {
+                currentBid: listing.currentBid,
+                bidCount: listing.bidCount,
+                bidIncrement: listing.bidIncrement,
+                auctionEndsAt: listing.auctionEndsAt,
+                extensionCount: isPending ? pendingExtensionCount : auctionExtensionCounts.get(listingId) || 0,
+                cleanDemoSeed: initialBidState.get(listingId)?.cleanDemoSeed === true,
+                seedAuctionEndsAt: initialBidState.get(listingId)?.cleanDemoSeed
+                    ? initialBidState.get(listingId).auctionEndsAt : undefined
+            }];
+        }));
         return writeJSON(STORAGE_KEYS.bids, savedBids);
     }
 
     function minimumNextBid(listing) {
         return bidRulesForListing(listing).minimumBid;
-    }
-
-    function bidRulesForListing(listing) {
-        const increment = normalizeBidIncrement(listing.bidIncrement, listing.currentBid);
-        const hasBuyNow = Number.isSafeInteger(listing.buyNowPrice);
-        const maximumBid = hasBuyNow
-            ? Math.min(bidCeiling, listing.buyNowPrice) : bidCeiling;
-        const minimumBid = Math.min(listing.currentBid + increment, maximumBid);
-        return { increment, minimumBid, maximumBid,
-            maximumStep: hasBuyNow ? maximumBid
-                : listing.currentBid + Math.floor((maximumBid - listing.currentBid) / increment) * increment };
     }
 
     function bidRules(listingId) {
@@ -141,31 +164,23 @@ export function createBiddingService(listingStates, transactionStore, userServic
 
     function commitBid(listingId, bidder, amount, { automatic = false, tiePriority = false } = {}) {
         const listing = listingStates.get(listingId);
-        const previousBid = listing.currentBid;
-        const previousBidCount = listing.bidCount;
-        const previousIncrement = listing.bidIncrement;
-        const previousAuctionEndsAt = listing.auctionEndsAt;
         const previousExtensionCount = auctionExtensionCounts.get(listingId) || 0;
         const auctionEnd = Date.parse(listing.auctionEndsAt);
         const buyNowReached = Number.isSafeInteger(listing.buyNowPrice) && amount >= listing.buyNowPrice;
         const lateBidExtended = !buyNowReached && Number.isFinite(auctionEnd) && auctionEnd - now() <= config.auctionRules.lateBidWindowMs;
         const placedAt = new Date(nextStamp(listingId)).toISOString();
-        const restore = () => {
-            listing.currentBid = previousBid;
-            listing.bidCount = previousBidCount;
-            listing.bidIncrement = previousIncrement;
-            listing.auctionEndsAt = previousAuctionEndsAt;
-            auctionExtensionCounts.set(listingId, previousExtensionCount);
+        // The transaction boundary must validate against the pre-bid price and end time.
+        const nextListing = {
+            ...listing,
+            bidIncrement: normalizeBidIncrement(listing.bidIncrement, listing.currentBid),
+            currentBid: amount,
+            bidCount: listing.bidCount + 1,
+            auctionEndsAt: lateBidExtended
+                ? new Date(auctionEnd + config.auctionRules.lateBidExtensionMs).toISOString()
+                : listing.auctionEndsAt
         };
-        listing.bidIncrement = normalizeBidIncrement(listing.bidIncrement, previousBid);
-        listing.currentBid = amount;
-        listing.bidCount += 1;
-        if (lateBidExtended) {
-            listing.auctionEndsAt = new Date(auctionEnd + config.auctionRules.lateBidExtensionMs).toISOString();
-            auctionExtensionCounts.set(listingId, previousExtensionCount + 1);
-        }
-        if (!persistBids()) {
-            restore();
+        const nextExtensionCount = previousExtensionCount + (lateBidExtended ? 1 : 0);
+        if (!persistBids(nextListing, nextExtensionCount)) {
             return { ok: false };
         }
         const transaction = transactionStore.transition(listingId, TRANSACTION_EVENT.placeBid, {
@@ -179,10 +194,11 @@ export function createBiddingService(listingStates, transactionStore, userServic
             tiePriority
         });
         if (!transaction) {
-            restore();
-            persistBids();
+            if (!persistBids()) persistBids();
             return { ok: false };
         }
+        Object.assign(listing, nextListing);
+        auctionExtensionCounts.set(listingId, nextExtensionCount);
         return { ok: true, transaction, lateBidExtended };
     }
 
@@ -484,7 +500,6 @@ export function createBiddingService(listingStates, transactionStore, userServic
             const committed = commitBid(listingId, currentUser, amount);
             if (!committed.ok) return { ok: false, code: SERVICE_ERROR_CODE.storageFailed, minimumBid };
             const reachedBuyNow = Number.isSafeInteger(listing.buyNowPrice) && listing.currentBid >= listing.buyNowPrice;
-            if (reachedBuyNow) closeAuction(listingId, { buyNowReached: true });
             const placed = reachedBuyNow ? [] : settleAutoBids(listingId);
             notifyAutoBidOutcomes(listingId, { actorUserId: currentUser.id, previousLeaderId, placed });
             const leading = leaderOf(listingId) === currentUser.id;

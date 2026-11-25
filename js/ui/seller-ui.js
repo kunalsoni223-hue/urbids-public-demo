@@ -110,9 +110,27 @@ export function createSellerPhotoManager({ documentRef = document, URLRef = URL 
     };
 }
 
-export function createSellerUI({ documentRef = document, dialogController, photoManager, userService, getPrototypeMode = () => PROTOTYPE_MODE.development, getActiveScenarioId = () => null, recordEvent = () => {}, onSubmissionsChanged = () => {}, onPreviewListing = () => {}, onDisableAutoRelist = () => {} }) {
+export function createSellerUI({ documentRef = document, dialogController, photoManager, userService, getPrototypeMode = () => PROTOTYPE_MODE.development, getActiveScenarioId = () => null, recordEvent = () => {}, onSubmissionsChanged = () => {}, onPreviewListing = () => {}, onDisableAutoRelist = () => {}, workspaceCoordinator = null }) {
     const dialog = documentRef.getElementById('seller-listing-dialog');
     const form = documentRef.getElementById('seller-listing-form');
+    if (!form) {
+        // Form doesn't exist in DOM - return stub functions
+        return {
+            openForm: () => {},
+            renderSubmissions: () => {},
+            getDraft: () => null,
+            resumeDraft: () => {},
+            deleteDraft: () => {},
+            setAccountGate: () => {},
+            handleSellerLocation: () => {},
+            setWorkspaceCoordinator: () => {},
+            collectFormValues: () => ({}),
+            saveDraft: () => {},
+            submitForm: () => {},
+            renderSubmissions: () => {},
+            handlePublish: () => {}
+        };
+    }
     const errorElement = documentRef.getElementById('seller-listing-error');
     const photoInput = documentRef.getElementById('seller-photos');
     const photoPreviews = documentRef.getElementById('seller-photo-previews');
@@ -123,19 +141,13 @@ export function createSellerUI({ documentRef = document, dialogController, photo
     const subcategorySelect = documentRef.getElementById('seller-subcategory');
     const photoPurposeSelect = documentRef.getElementById('seller-photo-purpose');
     const photoGuidance = documentRef.getElementById('seller-photo-guidance');
-    const conditionSelect = documentRef.getElementById('seller-condition');
+    const conditionRadios = Array.from(documentRef.querySelectorAll('input[name="condition"]'));
     const fulfilmentSelect = documentRef.getElementById('seller-fulfilment-method');
     const locationSelect = documentRef.getElementById('seller-location');
     const durationSelect = documentRef.getElementById('seller-auction-duration');
-    const formatSelect = documentRef.getElementById('seller-listing-format');
-    const incrementSelect = documentRef.getElementById('seller-bid-increment');
-    incrementSelect.replaceChildren(...config.sellerBidIncrements.map(amount => {
-        const option = documentRef.createElement('option');
-        option.value = String(amount);
-        option.textContent = formatCurrency(amount);
-        option.defaultSelected = amount === 100;
-        return option;
-    }));
+    const formatRadios = Array.from(documentRef.querySelectorAll('input[name="listingFormat"]'));
+    const bidIncrementRadios = Array.from(documentRef.querySelectorAll('input[name="bidIncrement"]'));
+    const autoRelistSelect = documentRef.getElementById('seller-auto-relist');
     const reserveModeSelect = documentRef.getElementById('seller-reserve-mode');
     const reservePriceInput = documentRef.getElementById('seller-reserve-price');
     const reservePriceWrap = documentRef.getElementById('seller-reserve-price-wrap');
@@ -143,7 +155,8 @@ export function createSellerUI({ documentRef = document, dialogController, photo
     const conditionGuidance = documentRef.getElementById('seller-condition-guidance');
     const maximumListingPrice = String(config.auctionRules.maximumListingPrice);
     ['seller-starting-bid', 'seller-buy-now', 'seller-reserve-price', 'seller-estimated-value'].forEach(id => {
-        documentRef.getElementById(id).max = maximumListingPrice;
+        const el = documentRef.getElementById(id);
+        if (el) el.max = maximumListingPrice;
     });
     const specificationFields = documentRef.getElementById('seller-specification-fields');
     const sectionDetails = Array.from(form.querySelectorAll('[data-seller-section]'));
@@ -174,13 +187,32 @@ export function createSellerUI({ documentRef = document, dialogController, photo
         categorySelect.value = CATEGORY.electronics;
     }
     updateCategoryOptions();
-    conditionSelect.replaceChildren(new Option('Choose a condition', ''), ...sellerConditionChoices.map(([value, label]) => new Option(label, value)));
     fulfilmentSelect.replaceChildren(...Object.entries(FULFILMENT_METHOD_LABELS).map(([value, label]) => new Option(label, value)));
     locationSelect.replaceChildren(new Option('Mumbai (city only)', config.pilotCity), ...MUMBAI_LOCALITIES.map(locality => new Option(locality, locality)));
+
     durationSelect.replaceChildren(...AUCTION_DURATION_OPTIONS_HOURS.map(hours => {
         const days = hours / 24;
         return new Option(`${days} days${days === 7 ? ' - Recommended' : ''}`, String(hours));
     }));
+
+    // Populate Auto-relist select
+    if (autoRelistSelect) {
+        autoRelistSelect.replaceChildren(
+            new Option('Let me decide', 'decide'),
+            new Option('Automatically relist once', 'once'),
+            new Option('Automatically relist up to 3 times', 'three')
+        );
+        autoRelistSelect.value = 'decide';
+    }
+
+    // Populate Reserve mode select (hidden in pilot mode, used in development)
+    if (reserveModeSelect) {
+        reserveModeSelect.replaceChildren(
+            new Option('No reserve', RESERVE_PRICE_MODE.none),
+            new Option('Set reserve', RESERVE_PRICE_MODE.set)
+        );
+        reserveModeSelect.value = RESERVE_PRICE_MODE.none;
+    }
 
     function renderSpecificationFields() {
         const fieldNames = (SPECIFICATION_FIELDS_BY_SUBCATEGORY[subcategorySelect.value] || [])
@@ -221,6 +253,7 @@ export function createSellerUI({ documentRef = document, dialogController, photo
     }
 
     function updateSubcategoryOptions() {
+        if (!categorySelect || !subcategorySelect) return;
         const allSubcategories = SUBCATEGORIES_BY_CATEGORY[categorySelect.value] || [];
         const subcategories = allSubcategories;
         subcategorySelect.replaceChildren(
@@ -228,28 +261,39 @@ export function createSellerUI({ documentRef = document, dialogController, photo
             ...subcategories.map(value => new Option(sellerSubcategoryLabels[categorySelect.value]?.[value] || SUBCATEGORY_LABELS[value], value))
         );
         subcategorySelect.value = '';
-        const suggestions = photoPurposes[categorySelect.value] || ['Main photo', 'Front', 'Back', 'Details', 'Wear/damage'];
-        photoPurposeSelect.replaceChildren(...suggestions.map(value => new Option(value, value)));
-        photoGuidance.replaceChildren(...suggestions.map(value => {
-            const item = documentRef.createElement('span');
-            item.textContent = value;
-            return item;
-        }));
-        documentRef.getElementById('seller-proof-help').hidden = categorySelect.value !== CATEGORY.electronics;
-        documentRef.getElementById('seller-activation-help').hidden = !['smartphones', 'laptops', 'wearables'].includes(subcategorySelect.value);
+        if (photoPurposeSelect) {
+            const suggestions = photoPurposes[categorySelect.value] || ['Main photo', 'Front', 'Back', 'Details', 'Wear/damage'];
+            photoPurposeSelect.replaceChildren(...suggestions.map(value => new Option(value, value)));
+        }
+        if (photoGuidance) {
+            const suggestions = photoPurposes[categorySelect.value] || ['Main photo', 'Front', 'Back', 'Details', 'Wear/damage'];
+            photoGuidance.replaceChildren(...suggestions.map(value => {
+                const item = documentRef.createElement('span');
+                item.textContent = value;
+                return item;
+            }));
+        }
+        const proofHelp = documentRef.getElementById('seller-proof-help');
+        if (proofHelp) proofHelp.hidden = categorySelect.value !== CATEGORY.electronics;
+        const activationHelp = documentRef.getElementById('seller-activation-help');
+        if (activationHelp) activationHelp.hidden = !['smartphones', 'laptops', 'wearables'].includes(subcategorySelect.value);
         const fulfilmentRecommendation = categorySelect.value === CATEGORY.furniture
             ? 'Large furniture: public collection is recommended.'
             : categorySelect.value === CATEGORY.electronics && ['smartphones', 'laptops', 'wearables', 'audio'].includes(subcategorySelect.value)
                 ? 'For higher-risk electronics, meet and inspect is recommended.'
                 : categorySelect.value === CATEGORY.books || ['small_appliances', 'accessories'].includes(subcategorySelect.value)
                     ? 'For small goods, collection or prototype shipping may be suitable.' : '';
-        documentRef.getElementById('seller-fulfilment-recommendation').textContent = fulfilmentRecommendation;
+        const fulfilmentRec = documentRef.getElementById('seller-fulfilment-recommendation');
+        if (fulfilmentRec) fulfilmentRec.textContent = fulfilmentRecommendation;
         renderSpecificationFields();
     }
 
-    updateSubcategoryOptions();
+    // Note: updateSubcategoryOptions() is called from openForm(), not here, to avoid errors with hidden form elements
 
     function updateReviewSummary() {
+        // Guard: skip if review summary elements don't exist
+        if (!reviewSummary.title || !reviewSummary.category) return;
+
         const values = new FormData(form);
         const title = String(values.get('title') || '').trim();
         const brand = String(values.get('brandModel') || '').trim();
@@ -393,8 +437,15 @@ export function createSellerUI({ documentRef = document, dialogController, photo
             if (['specifications', 'mainPhotoIndex', 'photos'].includes(name)) return;
             const field = form.elements.namedItem(name);
             if (!field) return;
-            if (field.type === 'checkbox') field.checked = value === true;
-            else field.value = String(value ?? '');
+            if (field.type === 'checkbox') {
+                field.checked = value === true;
+            } else if (field.type === 'radio') {
+                // For radio buttons, find and check the one with matching value
+                const radioToCheck = Array.from(documentRef.querySelectorAll(`input[name="${name}"]`)).find(r => r.value === String(value));
+                if (radioToCheck) radioToCheck.checked = true;
+            } else {
+                field.value = String(value ?? '');
+            }
         });
         updateSubcategoryOptions();
         subcategorySelect.value = SUBCATEGORIES_BY_CATEGORY[categorySelect.value]?.includes(savedSubcategory) ? savedSubcategory : '';
@@ -412,36 +463,116 @@ export function createSellerUI({ documentRef = document, dialogController, photo
 
     function updateReserveControl() {
         const controls = documentRef.getElementById('seller-reserve-controls');
-        controls.hidden = inPilotMode();
-        documentRef.getElementById('seller-summary-reserve-row').hidden = inPilotMode();
-        if (inPilotMode()) reserveModeSelect.value = RESERVE_PRICE_MODE.none;
-        const hasReserve = !inPilotMode() && reserveModeSelect.value === RESERVE_PRICE_MODE.set;
-        reservePriceWrap.hidden = !hasReserve;
-        reservePriceInput.disabled = !hasReserve;
-        reservePriceInput.required = hasReserve;
-        if (!hasReserve) reservePriceInput.value = '';
+        if (controls) controls.hidden = inPilotMode();
+
+        const reserveRow = documentRef.getElementById('seller-summary-reserve-row');
+        if (reserveRow) reserveRow.hidden = inPilotMode();
+
+        if (inPilotMode()) {
+            if (reserveModeSelect) reserveModeSelect.value = RESERVE_PRICE_MODE.none;
+        }
+
+        const hasReserve = !inPilotMode() && reserveModeSelect && reserveModeSelect.value === RESERVE_PRICE_MODE.set;
+        if (reservePriceWrap) reservePriceWrap.hidden = !hasReserve;
+        if (reservePriceInput) {
+            reservePriceInput.disabled = !hasReserve;
+            reservePriceInput.required = hasReserve;
+            if (!hasReserve) reservePriceInput.value = '';
+        }
     }
 
     function updateListingFormat() {
-        const buyNowOnly = formatSelect.value === 'buy_now';
-        const auction = formatSelect.value !== 'buy_now';
-        const buyNowAvailable = formatSelect.value !== 'auction';
-        documentRef.getElementById('seller-auction-pricing').hidden = !auction;
-        documentRef.getElementById('seller-starting-bid').required = auction;
-        documentRef.getElementById('seller-starting-bid').disabled = !auction;
-        documentRef.getElementById('seller-auction-duration-wrap').hidden = buyNowOnly;
-        documentRef.getElementById('seller-auto-relist-wrap').hidden = buyNowOnly;
-        documentRef.getElementById('seller-auto-relist').disabled = buyNowOnly;
-        documentRef.getElementById('seller-relist-help').hidden = buyNowOnly;
-        durationSelect.required = !buyNowOnly;
-        durationSelect.disabled = buyNowOnly;
-        documentRef.getElementById('seller-buy-now').required = buyNowAvailable;
-        documentRef.getElementById('seller-buy-now-controls').hidden = !buyNowAvailable;
-        if (!buyNowAvailable) documentRef.getElementById('seller-buy-now').value = '';
+        const selectedFormatRadio = documentRef.querySelector('input[name="listingFormat"]:checked');
+        const formatValue = selectedFormatRadio?.value || '';
+        const hasFormat = !!formatValue;
+        const buyNowOnly = formatValue === LISTING_FORMAT.buyNow;
+        const auction = formatValue === LISTING_FORMAT.auction || formatValue === LISTING_FORMAT.auctionAndBuyNow;
+        const buyNowAvailable = formatValue === LISTING_FORMAT.buyNow || formatValue === LISTING_FORMAT.auctionAndBuyNow;
+
+        // Show/hide auction controls based on format
+        const auctionControls = documentRef.getElementById('seller-auction-controls');
+        if (auctionControls) auctionControls.hidden = !auction;
+
+        // Update starting bid validation and visibility
+        const startingBid = documentRef.getElementById('seller-starting-bid');
+        if (startingBid) {
+            startingBid.required = auction;
+            startingBid.disabled = !auction;
+            const auctionPriceGroup = documentRef.getElementById('seller-auction-price-group');
+            if (auctionPriceGroup) auctionPriceGroup.hidden = !auction;
+        }
+
+        // Update bid increment fieldset validation and visibility
+        const bidIncrementWrapper = documentRef.querySelector('.bid-increment-wrapper');
+        if (bidIncrementWrapper) {
+            bidIncrementWrapper.hidden = !auction;
+            const bidIncrementRadios = bidIncrementWrapper.querySelectorAll('input[name="bidIncrement"]');
+            bidIncrementRadios.forEach(r => {
+                r.required = auction;
+                r.disabled = !auction;
+            });
+        }
+
+        // Update auction duration validation and visibility
+        const auctionDuration = documentRef.getElementById('seller-auction-duration');
+        if (auctionDuration) {
+            auctionDuration.required = auction;
+            auctionDuration.disabled = !auction;
+            if (auctionDuration.parentElement) auctionDuration.parentElement.hidden = !auction;
+        }
+
+        // Update auto-relist visibility and state
+        const autoRelist = documentRef.getElementById('seller-auto-relist');
+        if (autoRelist) {
+            autoRelist.disabled = !auction;
+            if (autoRelist.closest('[id$="-wrap"]')) {
+                autoRelist.closest('[id$="-wrap"]').hidden = !auction;
+            }
+        }
+
+        // Show/hide buy now controls
+        const buyNowControls = documentRef.getElementById('seller-buynow-controls');
+        if (buyNowControls) buyNowControls.hidden = !buyNowAvailable;
+
+        // Update buy now price validation and visibility
+        const buyNowPrice = documentRef.getElementById('seller-buy-now-price');
+        if (buyNowPrice) {
+            buyNowPrice.required = buyNowAvailable;
+            buyNowPrice.disabled = !buyNowAvailable;
+            if (!buyNowAvailable) buyNowPrice.value = '';
+            const buyNowPriceGroup = documentRef.getElementById('seller-buynow-price-group');
+            if (buyNowPriceGroup) buyNowPriceGroup.hidden = !buyNowAvailable;
+        }
+
+        // Update reserve mode if switching to buy-now-only
         if (buyNowOnly) {
-            reserveModeSelect.value = RESERVE_PRICE_MODE.none;
+            const reserveMode = documentRef.getElementById('seller-reserve-mode');
+            if (reserveMode) {
+                reserveMode.value = RESERVE_PRICE_MODE.none;
+            }
             updateReserveControl();
         }
+    }
+
+    function updateBidIncrementRecommendation() {
+        const startingBidInput = documentRef.getElementById('seller-starting-bid');
+        const recommendationEl = documentRef.getElementById('bid-increment-recommendation');
+        if (!recommendationEl || !startingBidInput) return;
+
+        const startingBid = Number(startingBidInput.value) || 0;
+
+        // Hide recommendation if no price entered
+        if (!startingBid) {
+            recommendationEl.textContent = '';
+            return;
+        }
+
+        let recommended = 100;
+        if (startingBid < 500) recommended = 10;
+        if (startingBid < 100) recommended = 1;
+        if (startingBid >= 5000) recommended = 1000;
+
+        recommendationEl.textContent = `Recommended increment: ₹${recommended.toLocaleString('en-IN')}`;
     }
 
     function openForm(draftToResume = null) {
@@ -449,16 +580,21 @@ export function createSellerUI({ documentRef = document, dialogController, photo
         delete form.dataset.submitting;
         updateCategoryOptions();
         updateSubcategoryOptions();
-        fulfilmentSelect.value = DEFAULT_FULFILMENT_METHOD;
-        durationSelect.value = String(DEFAULT_AUCTION_DURATION_HOURS);
-        formatSelect.value = 'auction';
+        if (fulfilmentSelect) fulfilmentSelect.value = DEFAULT_FULFILMENT_METHOD;
+        if (durationSelect) durationSelect.value = String(DEFAULT_AUCTION_DURATION_HOURS);
+        // Reset format radios
+        formatRadios.forEach(r => { r.checked = false; });
         updateListingFormat();
-        reserveModeSelect.value = RESERVE_PRICE_MODE.none;
+        if (reserveModeSelect) reserveModeSelect.value = RESERVE_PRICE_MODE.none;
         updateReserveControl();
         photoManager.clearPreviews(photoInput, photoPreviews);
-        locationSelect.value = config.pilotCity;
-        locationSelect.disabled = inPilotMode();
-        documentRef.getElementById('seller-estimated-value').required = inPilotMode();
+        if (locationSelect) {
+            locationSelect.value = config.pilotCity;
+            locationSelect.disabled = inPilotMode();
+        }
+        const estimatedValueEl = documentRef.getElementById('seller-estimated-value');
+        if (estimatedValueEl) estimatedValueEl.required = inPilotMode();
+
         const draft = draftToResume?.values ? draftToResume : loadSellerDraft(userService.getCurrentUser()?.id);
         if (draft) {
             restoreDraftValues(draft.values);
@@ -468,12 +604,23 @@ export function createSellerUI({ documentRef = document, dialogController, photo
         updateActiveSection();
         updateCharacterCounts();
         updateReviewSummary();
-        errorElement.textContent = '';
-        documentRef.getElementById('seller-listing-success').hidden = true;
-        documentRef.getElementById('seller-listing-done').hidden = true;
+        if (errorElement) errorElement.textContent = '';
+
+        const successEl = documentRef.getElementById('seller-listing-success');
+        if (successEl) successEl.hidden = true;
+
+        const doneEl = documentRef.getElementById('seller-listing-done');
+        if (doneEl) doneEl.hidden = true;
+
         form.hidden = false;
         recordEvent(USABILITY_EVENT_TYPE.sellerFormStarted);
-        dialogController.open(dialog, startButton);
+
+        // Use workspace if available, otherwise use dialog
+        if (workspaceCoordinator) {
+            workspaceCoordinator.open(draftToResume);
+        } else {
+            dialogController.open(dialog, startButton);
+        }
     }
 
     function saveDraft() {
@@ -703,60 +850,81 @@ export function createSellerUI({ documentRef = document, dialogController, photo
         documentRef.getElementById('seller-listing-done').hidden = false;
     }
 
-    startButton.addEventListener('click', openForm);
-    categorySelect.addEventListener('change', () => {
+    if (startButton) startButton.addEventListener('click', openForm);
+    if (categorySelect) categorySelect.addEventListener('change', () => {
         updateSubcategoryOptions();
         updateReviewSummary();
     });
-    conditionSelect.addEventListener('change', () => {
-        const defectInput = documentRef.getElementById('seller-known-defects');
-        defectInput.placeholder = conditionSelect.value === 'defective'
-            ? 'Describe the known functional problem.'
-            : conditionSelect.value === CONDITION_GRADE.fair ? 'Describe clear wear or disclosed issues.' : '';
-        updateReviewSummary();
-    });
-    formatSelect.addEventListener('change', () => {
-        updateListingFormat();
-        updateReviewSummary();
-        recordEvent(USABILITY_EVENT_TYPE.sellingFormatSelected, {
-            metadata: { category: categorySelect.value, subcategory: subcategorySelect.value, format: formatSelect.value }
+
+    // Condition radio change listener
+    conditionRadios.forEach(radio => {
+        radio.addEventListener('change', () => {
+            const defectInput = documentRef.getElementById('seller-known-defects');
+            const condition = radio.value;
+            if (defectInput) {
+                defectInput.placeholder = condition === 'defective'
+                    ? 'Describe the known functional problem.'
+                    : condition === CONDITION_GRADE.fair ? 'Describe clear wear or disclosed issues.' : '';
+            }
+            updateReviewSummary();
         });
     });
-    incrementSelect.addEventListener('change', () => recordEvent(USABILITY_EVENT_TYPE.sellingFormatSelected, {
-        metadata: {
-            category: categorySelect.value,
-            subcategory: subcategorySelect.value,
-            format: formatSelect.value,
-            bidIncrementOption: incrementSelect.value
-        }
-    }));
-    subcategorySelect.addEventListener('change', () => {
+
+    // Format radio change listener
+    formatRadios.forEach(radio => {
+        radio.addEventListener('change', () => {
+            updateListingFormat();
+            updateReviewSummary();
+            const selectedFormat = Array.from(documentRef.querySelectorAll('input[name="listingFormat"]:checked')).map(r => r.value).join();
+            recordEvent(USABILITY_EVENT_TYPE.sellingFormatSelected, {
+                metadata: { category: categorySelect?.value, subcategory: subcategorySelect?.value, format: selectedFormat }
+            });
+            updateBidIncrementRecommendation();
+        });
+    });
+
+    // Bid increment radio change listener
+    bidIncrementRadios.forEach(radio => {
+        radio.addEventListener('change', () => recordEvent(USABILITY_EVENT_TYPE.sellingFormatSelected, {
+            metadata: {
+                category: categorySelect?.value,
+                subcategory: subcategorySelect?.value,
+                format: Array.from(documentRef.querySelectorAll('input[name="listingFormat"]:checked')).map(r => r.value).join(),
+                bidIncrementOption: radio.value
+            }
+        }));
+    });
+
+    if (subcategorySelect) subcategorySelect.addEventListener('change', () => {
         renderSpecificationFields();
         updateReviewSummary();
         if (subcategorySelect.value) recordEvent(USABILITY_EVENT_TYPE.sellerSubmissionStarted, {
-            metadata: { category: categorySelect.value, subcategory: subcategorySelect.value, source: 'category_selection' }
+            metadata: { category: categorySelect?.value, subcategory: subcategorySelect.value, source: 'category_selection' }
         });
     });
-    photoInput.addEventListener('change', () => {
-        photoManager.showPreviews(photoInput, photoPreviews, errorElement, photoPurposeSelect.value);
+    if (photoInput) photoInput.addEventListener('change', () => {
+        photoManager.showPreviews(photoInput, photoPreviews, errorElement, photoPurposeSelect?.value);
         updateReviewSummary();
     });
-    form.addEventListener('input', () => {
+    form.addEventListener('input', (event) => {
         documentRef.activeElement?.removeAttribute('aria-invalid');
         updateCharacterCounts();
+        if (event.target.id === 'seller-starting-bid') {
+            updateBidIncrementRecommendation();
+        }
         updateReviewSummary();
     });
     form.addEventListener('change', event => {
         updateCharacterCounts();
         updateReviewSummary();
         if (event.target === durationSelect) recordEvent(USABILITY_EVENT_TYPE.auctionDurationSelected, {
-            metadata: { durationOption: durationSelect.value, category: categorySelect.value, subcategory: subcategorySelect.value }
+            metadata: { durationOption: durationSelect?.value, category: categorySelect?.value, subcategory: subcategorySelect?.value }
         });
         if (event.target.id === 'seller-auto-relist') recordEvent(USABILITY_EVENT_TYPE.autoRelistSelected, {
-            metadata: { autoRelistChoice: event.target.value, category: categorySelect.value, subcategory: subcategorySelect.value }
+            metadata: { autoRelistChoice: event.target.value, category: categorySelect?.value, subcategory: subcategorySelect?.value }
         });
         if (event.target === fulfilmentSelect) recordEvent(USABILITY_EVENT_TYPE.sellerFulfilmentSelected, {
-            metadata: { fulfilment: fulfilmentSelect.value, category: categorySelect.value, subcategory: subcategorySelect.value }
+            metadata: { fulfilment: fulfilmentSelect?.value, category: categorySelect?.value, subcategory: subcategorySelect?.value }
         });
     });
     sectionDetails.forEach(section => section.addEventListener('toggle', () => {
@@ -766,12 +934,14 @@ export function createSellerUI({ documentRef = document, dialogController, photo
         });
         updateActiveSection();
     }));
-    reserveModeSelect.addEventListener('change', () => {
+    if (reserveModeSelect) reserveModeSelect.addEventListener('change', () => {
         updateReserveControl();
         updateReviewSummary();
     });
-    documentRef.getElementById('seller-save-draft').addEventListener('click', saveDraft);
-    documentRef.getElementById('seller-preview-listing').addEventListener('click', () => {
+    const saveDraftBtn = documentRef.getElementById('seller-save-draft');
+    if (saveDraftBtn) saveDraftBtn.addEventListener('click', saveDraft);
+    const previewBtn = documentRef.getElementById('seller-preview-listing');
+    if (previewBtn) previewBtn.addEventListener('click', () => {
         recordEvent(USABILITY_EVENT_TYPE.sellerPreviewOpened, { metadata: { source: 'preview' } });
         const values = new FormData(form);
         const selected = sellerConditionChoices.find(([value]) => value === values.get('condition'));
@@ -813,9 +983,21 @@ export function createSellerUI({ documentRef = document, dialogController, photo
         });
     });
     form.addEventListener('submit', submitForm);
-    documentRef.getElementById('cancel-seller-listing').addEventListener('click', () => dialogController.close(dialog));
-    documentRef.getElementById('seller-listing-done').addEventListener('click', () => dialogController.close(dialog));
-    dialog.addEventListener('close', () => photoManager.clearPreviews(photoInput, photoPreviews));
+    const cancelBtn = documentRef.getElementById('cancel-seller-listing');
+    if (cancelBtn) cancelBtn.addEventListener('click', () => dialogController.close(dialog));
+    const doneBtn = documentRef.getElementById('seller-listing-done');
+    if (doneBtn) doneBtn.addEventListener('click', () => dialogController.close(dialog));
+    if (dialog) dialog.addEventListener('close', () => photoManager.clearPreviews(photoInput, photoPreviews));
+
+    function handleSellerLocation() {
+        const windowRef = documentRef.defaultView || window;
+        if (windowRef.location.hash === '#sell') {
+            accountGate(() => openForm(), startButton);
+        }
+    }
+
+    documentRef.defaultView.addEventListener('popstate', handleSellerLocation);
+    documentRef.defaultView.addEventListener('hashchange', handleSellerLocation);
 
     return {
         openForm,
@@ -828,6 +1010,30 @@ export function createSellerUI({ documentRef = document, dialogController, photo
             recordEvent(USABILITY_EVENT_TYPE.sellerDraftDeleted, { metadata: { source: 'seller_panel' } });
             renderSubmissions();
         },
-        setAccountGate(handler) { accountGate = handler; }
+        setAccountGate(handler) { accountGate = handler; },
+        handleSellerLocation,
+        setWorkspaceCoordinator(coordinator) { workspaceCoordinator = coordinator; },
+        // Additional methods for workspace
+        collectFormValues() {
+            return collectDraftValues();
+        },
+        saveDraft() {
+            saveDraft();
+        },
+        submitForm(values) {
+            if (values) {
+                // Use provided values instead of collecting from form
+                return createSubmission(values);
+            }
+            return submitForm();
+        },
+        validateForm() {
+            // Trigger validation by checking form validity
+            if (!form.checkValidity()) {
+                form.reportValidity();
+                return false;
+            }
+            return true;
+        }
     };
 }
