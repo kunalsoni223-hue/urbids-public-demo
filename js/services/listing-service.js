@@ -1,7 +1,7 @@
 import { config } from '../config.js';
 import { listings as staticListings, sampleListingSeedTime } from '../data/sample-listings.js';
 import { CATEGORY_LABELS, CONDITION_GRADE_LABELS, DEFAULT_DEMO_USER_ID, LISTING_FORMAT, SELLER_LISTING_ID_PREFIX, STORAGE_KEYS, SUBCATEGORY_LABELS, SUBMISSION_STATUS, TRANSACTION_STATUS } from '../core/constants.js';
-import { readJSON, writeJSON } from '../core/storage.js';
+import { readArray, readJSON, readRecord, writeJSON } from '../core/storage.js';
 import { getDemoUser } from '../data/demo-users.js';
 import { isPrototypeUserId } from '../core/normalization.js';
 import { validateSellerListing } from '../core/validation.js';
@@ -51,8 +51,7 @@ export function getDiscoveryShelfListings(listings, {
     let result = available;
 
     if (shelf === 'ending-soon') {
-        result = available.filter(listing => listing.listingFormat !== LISTING_FORMAT.buyNow
-            && Date.parse(listing.auctionEndsAt) > now);
+        result = available.filter(listing => [LISTING_FORMAT.auction, LISTING_FORMAT.auctionAndBuyNow].includes(listing.listingFormat));
         result.sort((left, right) => Date.parse(left.auctionEndsAt) - Date.parse(right.auctionEndsAt)
             || left.id.localeCompare(right.id));
     } else if (shelf === 'popular') {
@@ -79,13 +78,14 @@ export function getDiscoveryShelfListings(listings, {
     return result.slice(0, Math.max(0, limit));
 }
 
-export function sortMarketplaceListings(listings, { sort = 'featured', now = Date.now() } = {}) {
-    const result = [...listings];
+export function sortMarketplaceListings(listings, { sort = 'featured', now = Date.now(), transactionStore, isPublicListing = () => true } = {}) {
+    let result = [...listings];
     if (sort === 'ending-soon') {
-        const isActiveAuction = listing => listing.listingFormat !== LISTING_FORMAT.buyNow
-            && Date.parse(listing.auctionEndsAt) > now;
-        result.sort((left, right) => Number(isActiveAuction(right)) - Number(isActiveAuction(left))
-            || (isActiveAuction(left) ? Date.parse(left.auctionEndsAt) - Date.parse(right.auctionEndsAt) : 0)
+        if (!transactionStore) throw new TypeError('Ending soon requires a transaction store');
+        result = result.filter(listing => isPublicListing(listing) && !listing.secondChanceOffer
+            && [LISTING_FORMAT.auction, LISTING_FORMAT.auctionAndBuyNow].includes(listing.listingFormat)
+            && isAvailableListing(listing, transactionStore, now));
+        result.sort((left, right) => Date.parse(left.auctionEndsAt) - Date.parse(right.auctionEndsAt)
             || left.id.localeCompare(right.id));
     } else if (sort === 'newest') {
         result.sort((left, right) => (Date.parse(right.listedAt) || 0) - (Date.parse(left.listedAt) || 0)
@@ -246,16 +246,102 @@ export function createPublishedSellerListing(submission, imageUrl = null) {
     });
 }
 
+const emptyClosureFields = new Set([
+    'purchaseSource', 'buyerUserId', 'winner', 'winningBid', 'reserveOutcome', 'transactionPrice',
+    'noShowOutcome', 'noShowUserId', 'tokenOutcome', 'inspectionDeclined', 'relistEligible', 'completedAt',
+    'winnerResponseDeadline', 'outcome', 'depositAmount', 'depositOutcome', 'listingSnapshot', 'fulfilmentPath',
+    'failedBuyerUserId', 'failureOutcome', 'failureReason', 'mismatchReason', 'sellerCancellationStage',
+    'cancelledAt', 'shippingReference', 'shippingRequestedAt', 'shippingDispatchedAt',
+    'shippingDeliveredAt', 'shippingInspectionEndsAt'
+]);
+
+function isEmptyAutomaticClosure(transaction) {
+    return transaction?.status === TRANSACTION_STATUS.auctionWon
+        && Array.isArray(transaction.bidHistory) && transaction.bidHistory.length === 0
+        && Object.entries(transaction).every(([key, value]) => {
+            if (['status', 'bidHistory', 'sellerUserId'].includes(key)) return true;
+            return emptyClosureFields.has(key) && [null, undefined, false, 0, ''].includes(value);
+        });
+}
+
+function hasSampleActivity(sample, bids, transactions, autoBids, linkedActivity) {
+    const bid = bids[sample.id];
+    return Boolean((bid && (bid.currentBid !== sample.currentBid || bid.bidCount !== sample.bidCount
+        || bid.extensionCount > 0)) || autoBids[sample.id] || linkedActivity.has(sample.id)
+        || (transactions[sample.id] && !isEmptyAutomaticClosure(transactions[sample.id])));
+}
+
+function getLinkedSampleActivity() {
+    return new Set([STORAGE_KEYS.meetups, STORAGE_KEYS.disputes, STORAGE_KEYS.ratings]
+        .flatMap(key => readArray(key).map(record => record?.listingId).filter(Boolean)));
+}
+
 export function initializeSampleTiming(listingStates, seedTime = sampleListingSeedTime) {
     let savedSeedTime = readJSON(STORAGE_KEYS.sampleSeedTime, null, Number.isSafeInteger);
     if (savedSeedTime === null) {
         if (!writeJSON(STORAGE_KEYS.sampleSeedTime, seedTime)) return false;
         savedSeedTime = seedTime;
     }
-    const offset = savedSeedTime - seedTime;
+    let migration = readJSON(STORAGE_KEYS.sampleTimingMigration, null,
+        value => value !== null && typeof value === 'object' && !Array.isArray(value));
+    if (migration === null) {
+        const bids = readRecord(STORAGE_KEYS.bids);
+        const transactions = readRecord(STORAGE_KEYS.auctionTransactions);
+        const autoBids = readRecord(STORAGE_KEYS.autoBids);
+        const linkedActivity = getLinkedSampleActivity();
+        const refreshed = {};
+        for (const sample of staticListings) {
+            const listing = listingStates.get(sample.id);
+            if (!listing || listing.source === 'seller_submission'
+                || Date.parse(sample.auctionEndsAt) <= sampleListingSeedTime) continue;
+            const bid = bids[sample.id];
+            const transaction = transactions[sample.id];
+            const emptyClosure = isEmptyAutomaticClosure(transaction);
+            if (hasSampleActivity(sample, bids, transactions, autoBids, linkedActivity)) continue;
+            const oldEnd = bid?.cleanDemoSeed === true
+                ? Date.parse(bid.auctionEndsAt)
+                : Date.parse(sample.auctionEndsAt) + savedSeedTime - sampleListingSeedTime;
+            if ((oldEnd <= seedTime || (emptyClosure && savedSeedTime === seedTime)) && Number.isFinite(oldEnd)) {
+                refreshed[sample.id] = seedTime;
+            }
+        }
+        migration = { refreshed, pending: true };
+        if (!writeJSON(STORAGE_KEYS.sampleTimingMigration, migration)) return false;
+    }
+    const refreshed = migration.refreshed || {};
+    if (migration.pending) {
+        const bids = readRecord(STORAGE_KEYS.bids);
+        const transactions = readRecord(STORAGE_KEYS.auctionTransactions);
+        const autoBids = readRecord(STORAGE_KEYS.autoBids);
+        const linkedActivity = getLinkedSampleActivity();
+        let bidsChanged = false;
+        let transactionsChanged = false;
+        for (const [id, anchor] of Object.entries(refreshed)) {
+            const sample = staticListings.find(item => item.id === id);
+            if (!Number.isSafeInteger(anchor) || !sample
+                || hasSampleActivity(sample, bids, transactions, autoBids, linkedActivity)) {
+                delete refreshed[id];
+                continue;
+            }
+            const saved = bids[id];
+            if (saved?.cleanDemoSeed === true && !saved.extensionCount) {
+                bids[id] = { ...saved, cleanDemoSeed: false };
+                bidsChanged = true;
+            }
+            const transaction = transactions[id];
+            if (isEmptyAutomaticClosure(transaction)) {
+                delete transactions[id];
+                transactionsChanged = true;
+            }
+        }
+        if (bidsChanged && !writeJSON(STORAGE_KEYS.bids, bids)) return false;
+        if (transactionsChanged && !writeJSON(STORAGE_KEYS.auctionTransactions, transactions)) return false;
+        if (!writeJSON(STORAGE_KEYS.sampleTimingMigration, { refreshed, pending: false })) return false;
+    }
     for (const sample of staticListings) {
         const listing = listingStates.get(sample.id);
         if (!listing || listing.source === 'seller_submission') continue;
+        const offset = (Number.isSafeInteger(refreshed[sample.id]) ? refreshed[sample.id] : savedSeedTime) - seedTime;
         listing.listedAt = new Date(Date.parse(listing.listedAt) + offset).toISOString();
         listing.auctionEndsAt = new Date(Date.parse(listing.auctionEndsAt) + offset).toISOString();
     }

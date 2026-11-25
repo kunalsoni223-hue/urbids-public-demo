@@ -297,6 +297,10 @@ export function createMarketplaceUI({ documentRef = document, state, biddingServ
             return;
         }
         const now = Date.now();
+        if (listingSort.value === 'ending-soon' && Array.from(listingContainer.querySelectorAll('[data-auction-ends]'))
+            .some(countdown => Date.parse(countdown.dataset.auctionEnds) <= now)) {
+            renderListings(false);
+        }
         documentRef.querySelectorAll('#listing-container [data-auction-ends], #discovery-shelves [data-auction-ends]').forEach(countdown => {
             const endTime = Date.parse(countdown.dataset.auctionEnds);
             const isValid = Number.isFinite(endTime);
@@ -756,7 +760,7 @@ export function createMarketplaceUI({ documentRef = document, state, biddingServ
         const watchlist = userService.getWatchlist();
         const matchingListings = sortMarketplaceListings(
             catalogue.filter(listing => matchesActiveFilters(listing, watchlist)),
-            { sort: listingSort.value }
+            { sort: listingSort.value, transactionStore, isPublicListing: auctionManagement.isPublicListing }
         );
         const visibleListings = matchingListings.slice(0, visibleListingLimit);
         listingContainer.replaceChildren(...visibleListings.map((listing, index) => createListingCard(listing, index === 0)));

@@ -1,7 +1,9 @@
 body[data-view="account"] main > :not(dialog):not(#account-area),
 body[data-view="profile"] main > :not(dialog):not(#public-profile-view),
+body[data-view="sell"] main > :not(dialog):not(#sell-workspace),
 body[data-view="account"] #category-navigation,
-body[data-view="profile"] #category-navigation {
+body[data-view="profile"] #category-navigation,
+body[data-view="sell"] #category-navigation {
     display: none !important;
 }
 

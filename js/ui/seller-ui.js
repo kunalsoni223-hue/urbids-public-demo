@@ -714,6 +714,7 @@ export function createSellerUI({ documentRef = document, dialogController, photo
         if (form.dataset.submitting === 'true') return;
         if (accountGate(() => form.requestSubmit(), form.querySelector('button[type="submit"]')) === false) return;
         errorElement.textContent = '';
+        errorElement.hidden = false;
         const formData = new FormData(form);
         const plainText = value => String(value ?? '').replace(/<[^>]*>/g, '').replace(/[\u0000-\u0008\u000b\u000c\u000e-\u001f]/g, '').trim();
         const title = plainText(formData.get('title')).slice(0, 60);
@@ -736,10 +737,11 @@ export function createSellerUI({ documentRef = document, dialogController, photo
                                     : '';
         if (validationMessage) {
             errorElement.textContent = validationMessage;
+            workspaceCoordinator?.goToStep(1);
             const target = validationMessage.includes('photo') ? photoInput
                 : validationMessage.includes('defect') ? documentRef.getElementById('seller-known-defects')
                     : validationMessage.includes('acknowledgement') ? documentRef.getElementById('seller-acknowledgement')
-                        : validationMessage.includes('condition') ? conditionSelect
+                        : validationMessage.includes('condition') ? conditionRadios[0]
                         : documentRef.getElementById('seller-item-title');
             revealField(target);
             target.focus();
@@ -790,6 +792,7 @@ export function createSellerUI({ documentRef = document, dialogController, photo
 
         if (!result.ok) {
             form.dataset.submitting = 'false';
+            workspaceCoordinator?.goToStep(1);
             if (result.validation?.validBidIncrement === false) {
                 errorElement.textContent = 'Choose one of the available bid increments.';
             } else if (result.validation?.validStartingBid === false) {
@@ -819,7 +822,7 @@ export function createSellerUI({ documentRef = document, dialogController, photo
             }
             const fieldId = result.validation && [
                 ['validStartingBid', 'seller-starting-bid'], ['validSubcategory', 'seller-subcategory'],
-                ['validBuyNowPrice', 'seller-buy-now'], ['validReservePrice', 'seller-reserve-price'],
+                ['validBuyNowPrice', 'seller-buy-now-price'], ['validReservePrice', 'seller-reserve-price'],
                 ['validAuctionDuration', 'seller-auction-duration'], ['validPriceLimit', 'seller-starting-bid']
             ].find(([rule]) => result.validation[rule] === false)?.[1];
             if (fieldId) {
@@ -843,14 +846,10 @@ export function createSellerUI({ documentRef = document, dialogController, photo
         renderSubmissions();
         onSubmissionsChanged();
         photoManager.clearPreviews(photoInput, photoPreviews);
-        form.hidden = true;
-        const success = documentRef.getElementById('seller-listing-success');
-        success.textContent = 'Saved as a pending-review simulation in this browser. No real review or publication occurs. Photos are available only during this visit.';
-        success.hidden = false;
-        documentRef.getElementById('seller-listing-done').hidden = false;
+        errorElement.hidden = true;
+        workspaceCoordinator.showSubmissionSuccess();
     }
 
-    if (startButton) startButton.addEventListener('click', openForm);
     if (categorySelect) categorySelect.addEventListener('change', () => {
         updateSubcategoryOptions();
         updateReviewSummary();
@@ -996,9 +995,6 @@ export function createSellerUI({ documentRef = document, dialogController, photo
         }
     }
 
-    documentRef.defaultView.addEventListener('popstate', handleSellerLocation);
-    documentRef.defaultView.addEventListener('hashchange', handleSellerLocation);
-
     return {
         openForm,
         renderSubmissions,
@@ -1013,6 +1009,7 @@ export function createSellerUI({ documentRef = document, dialogController, photo
         setAccountGate(handler) { accountGate = handler; },
         handleSellerLocation,
         setWorkspaceCoordinator(coordinator) { workspaceCoordinator = coordinator; },
+        handlePublish() { form.requestSubmit(); },
         // Additional methods for workspace
         collectFormValues() {
             return collectDraftValues();

@@ -1,6 +1,7 @@
 export const STORAGE_KEYS = Object.freeze({
     schemaVersion: 'urbids-demo-schema-version',
     sampleSeedTime: 'urbids-demo-sample-seed-time',
+    sampleTimingMigration: 'urbids-demo-sample-timing-migration',
     bids: 'urbids-demo-bids',
     autoBids: 'urbids-demo-auto-bids',
     watchlist: 'urbids-demo-watchlist',

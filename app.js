@@ -12,6 +12,8 @@ import { createDialogController } from './js/ui/dialog.js';
 import { createMarketplaceUI } from './js/ui/marketplace-ui.js';
 import { createListingDialogUI } from './js/ui/listing-dialog-ui.js';
 import { createSellerPhotoManager, createSellerUI } from './js/ui/seller-ui.js';
+import { createSellWorkspaceCoordinator } from './js/ui/sell-workspace-ui.js';
+import { createSellRouting } from './js/ui/sell-routing.js';
 import { createTransactionUI } from './js/ui/transaction-ui.js';
 import { createProfileUI } from './js/ui/profile-ui.js';
 import { createAccountUI } from './js/ui/account-ui.js';
@@ -247,6 +249,15 @@ sellerUI.setAccountGate((action, returnFocus) => accountUI.requireLocalAccount(a
 listingDialogUI.setAccountGate((action, returnFocus) => accountUI.requireLocalAccount(action, returnFocus));
 transactionUI.setAccountGate((action, returnFocus) => accountUI.requireLocalAccount(action, returnFocus));
 
+const sellRouting = createSellRouting({
+    documentRef, sellerUI, getWorkspace: () => sellWorkspace, getAccountUI: () => accountUI
+});
+const sellWorkspace = createSellWorkspaceCoordinator({
+    documentRef, sellerUI, photoManager: sellerPhotoManager, recordEvent,
+    setPrimaryView: sellRouting.setPrimaryView
+});
+sellerUI.setWorkspaceCoordinator(sellWorkspace);
+
 profileUI = createProfileUI({
     documentRef,
     userService,
@@ -313,5 +324,5 @@ createPublicInfoUI({ documentRef, dialogController, openFeedback: feedbackUI.ope
 marketplaceUI.renderListings();
 sellerUI.renderSubmissions();
 accountUI.openFromLocation();
-sellerUI.handleSellerLocation();
+sellRouting.start();
 listingDialogUI.handleListingLocation();
